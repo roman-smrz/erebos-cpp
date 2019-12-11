@@ -22,6 +22,7 @@ using std::copy;
 using std::holds_alternative;
 using std::ifstream;
 using std::make_shared;
+using std::monostate;
 using std::nullopt;
 using std::runtime_error;
 using std::shared_ptr;
@@ -268,6 +269,11 @@ const Object * Ref::operator->() const
 }
 
 
+Record::Item::operator bool() const
+{
+	return !holds_alternative<monostate>(value);
+}
+
 optional<int> Record::Item::asInteger() const
 {
 	if (holds_alternative<int>(value))
@@ -351,16 +357,16 @@ const vector<Record::Item> & Record::items() const
 	return *ptr;
 }
 
-optional<Record::Item> Record::item(const string & name) const
+Record::Item Record::item(const string & name) const
 {
 	for (auto item : *ptr) {
 		if (item.name == name)
 			return item;
 	}
-	return nullopt;
+	return Item("", monostate());
 }
 
-optional<Record::Item> Record::operator[](const string & name) const
+Record::Item Record::operator[](const string & name) const
 {
 	return item(name);
 }
@@ -484,6 +490,11 @@ vector<uint8_t> Object::encode() const
 
 	copy(inner.begin(), inner.end(), inserter);
 	return res;
+}
+
+optional<Object> Object::load(const Ref & ref)
+{
+	return *ref;
 }
 
 optional<Record> Object::asRecord() const

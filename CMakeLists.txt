@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_library(B2_LIBRARY b2 REQUIRED)
 
 add_subdirectory(src)

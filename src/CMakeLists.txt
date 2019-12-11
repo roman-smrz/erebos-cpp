@@ -3,5 +3,7 @@ include_directories(
 )
 
 add_library(erebos
+	identity
+	pubkey
 	storage
 )

@@ -14,6 +14,7 @@ class Storage;
 class Digest;
 class Ref;
 class Object;
+template<typename T> class Stored;
 
 class Storage
 {
@@ -44,6 +45,8 @@ public:
 	explicit Digest(std::array<uint8_t, size> value): value(value) {}
 	explicit Digest(const std::string &);
 	explicit operator std::string() const;
+
+	const std::array<uint8_t, size> & arr() const { return value; }
 
 	bool operator==(const Digest & other) const { return value == other.value; }
 	bool operator!=(const Digest & other) const { return value != other.value; }
@@ -81,20 +84,27 @@ public:
 	class Item {
 	public:
 		typedef std::variant<
+			std::monostate,
 			int,
 			std::string,
 			std::vector<uint8_t>,
 			Ref> Variant;
 
+		Item(const std::string & name):
+			Item(name, std::monostate()) {}
 		Item(const std::string & name, Variant value):
 			name(name), value(value) {}
 		Item(const Item &) = default;
 		Item & operator=(const Item &) = delete;
 
+		operator bool() const;
+
 		std::optional<int> asInteger() const;
 		std::optional<std::string> asText() const;
 		std::optional<std::vector<uint8_t>> asBinary() const;
 		std::optional<Ref> asRef() const;
+
+		template<typename T> std::optional<Stored<T>> as() const;
 
 	private:
 		friend class Record;
@@ -111,8 +121,8 @@ public:
 	std::vector<uint8_t> encode() const;
 
 	const std::vector<Item> & items() const;
-	std::optional<Item> item(const std::string & name) const;
-	std::optional<Item> operator[](const std::string & name) const;
+	Item item(const std::string & name) const;
+	Item operator[](const std::string & name) const;
 	std::vector<Item> items(const std::string & name) const;
 
 private:
@@ -158,6 +168,7 @@ public:
 
 	static std::optional<Object> decode(Storage, const std::vector<uint8_t> &);
 	std::vector<uint8_t> encode() const;
+	static std::optional<Object> load(const Ref &);
 
 	std::optional<Record> asRecord() const;
 	std::optional<Blob> asBlob() const;
@@ -168,5 +179,88 @@ private:
 
 	Variants content;
 };
+
+template<typename T>
+std::optional<Stored<T>> Record::Item::as() const
+{
+	if (auto ref = asRef())
+		return Stored<T>::load(ref.value());
+	return std::nullopt;
+}
+
+template<typename T>
+class Stored
+{
+	Stored(Ref ref, std::shared_ptr<T> val): ref(ref), val(val) {}
+public:
+	static std::optional<Stored<T>> load(const Ref &);
+
+	bool operator==(const Stored<T> & other) const
+	{ return ref.digest() == other.ref.digest(); }
+	bool operator!=(const Stored<T> & other) const
+	{ return ref.digest() != other.ref.digest(); }
+	bool operator<(const Stored<T> & other) const
+	{ return ref.digest() < other.ref.digest(); }
+	bool operator<=(const Stored<T> & other) const
+	{ return ref.digest() <= other.ref.digest(); }
+	bool operator>(const Stored<T> & other) const
+	{ return ref.digest() > other.ref.digest(); }
+	bool operator>=(const Stored<T> & other) const
+	{ return ref.digest() >= other.ref.digest(); }
+
+	const T & operator*() const { return *val; }
+	const T * operator->() const { return val.get(); }
+
+	std::vector<Stored<T>> previous() const;
+	bool precedes(const Stored<T> &) const;
+
+	const Ref ref;
+	const std::shared_ptr<T> val;
+};
+
+template<typename T>
+std::optional<Stored<T>> Stored<T>::load(const Ref & ref)
+{
+	if (auto val = T::load(ref))
+		return Stored(ref, std::make_shared<T>(val.value()));
+	return std::nullopt;
+}
+
+template<typename T>
+std::vector<Stored<T>> Stored<T>::previous() const
+{
+	auto rec = ref->asRecord();
+	if (!rec)
+		return {};
+
+	auto sdata = rec->item("SDATA").asRef();
+	if (sdata) {
+		auto drec = sdata.value()->asRecord();
+		if (!drec)
+			return {};
+
+		std::vector<Stored<T>> res;
+		for (const auto & i : drec->items("SPREV"))
+			if (auto x = i.as<T>())
+				res.push_back(*x);
+		return res;
+	}
+
+	std::vector<Stored<T>> res;
+	for (auto & i : rec->items("PREV"))
+		if (auto x = i.as<T>())
+			res.push_back(*x);
+	return res;
+}
+
+template<typename T>
+bool Stored<T>::precedes(const Stored<T> & other) const
+{
+	for (const auto & x : other.previous()) {
+		if (*this == x || precedes(x))
+			return true;
+	}
+	return false;
+}
 
 }
