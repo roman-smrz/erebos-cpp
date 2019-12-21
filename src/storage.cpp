@@ -258,7 +258,7 @@ Digest::Digest(const string & str)
 	if (str.size() != 2 * size)
 		throw runtime_error("invalid ref digest");
 
-	for (int i = 0; i < size; i++)
+	for (size_t i = 0; i < size; i++)
 		std::from_chars(str.data() + 2 * i,
 				str.data() + 2 * i + 2,
 				value[i], 16);
@@ -267,7 +267,7 @@ Digest::Digest(const string & str)
 Digest::operator string() const
 {
 	string res(size * 2, '0');
-	for (int i = 0; i < size; i++)
+	for (size_t i = 0; i < size; i++)
 		std::to_chars(res.data() + 2 * i + (value[i] < 0x10),
 				res.data() + 2 * i + 2,
 				value[i], 16);
@@ -283,6 +283,7 @@ optional<Ref> Ref::create(Storage st, const Digest & digest)
 	auto p = new Priv {
 		.storage = st,
 		.digest = digest,
+		.object = {},
 	};
 
 	p->object = std::async(std::launch::deferred, [p] {
@@ -502,7 +503,7 @@ optional<Object> Object::decode(Storage st, const vector<uint8_t> & data)
 	if (space == newline)
 		return nullopt;
 
-	size_t size = std::stoi(string(space + 1, newline));
+	ssize_t size = std::stoi(string(space + 1, newline));
 	if (data.end() - newline - 1 != size)
 		return nullopt;
 

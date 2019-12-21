@@ -169,6 +169,8 @@ shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<Stored<Signed<I
 
 	auto p = new Priv {
 		.data = sdata,
+		.name = {},
+		.owner = nullopt,
 	};
 	shared_ptr<Priv> ret(p);
 
