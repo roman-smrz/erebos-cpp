@@ -24,6 +24,7 @@ using std::ifstream;
 using std::make_shared;
 using std::monostate;
 using std::nullopt;
+using std::ofstream;
 using std::runtime_error;
 using std::shared_ptr;
 using std::string;
@@ -43,12 +44,28 @@ optional<Storage> Storage::open(fs::path path)
 	return Storage(shared_ptr<const Priv>(new Priv { path }));
 }
 
+bool Storage::operator==(const Storage & other) const
+{
+	return p == other.p;
+}
+
+bool Storage::operator!=(const Storage & other) const
+{
+	return p != other.p;
+}
+
 fs::path Storage::Priv::objectPath(const Digest & digest) const
 {
 	string name(digest);
 	return root/"objects"/
 		fs::path(name.begin(), name.begin() + 2)/
 		fs::path(name.begin() + 2, name.end());
+}
+
+fs::path Storage::Priv::keyPath(const Digest & digest) const
+{
+	string name(digest);
+	return root/"keys"/fs::path(name.begin(), name.end());
 }
 
 optional<Ref> Storage::ref(const Digest & digest) const
@@ -115,7 +132,7 @@ optional<vector<uint8_t>> Storage::Priv::loadBytes(const Digest & digest) const
 	return out;
 }
 
-optional<Object> Storage::load(const Digest & digest) const
+optional<Object> Storage::loadObject(const Digest & digest) const
 {
 	auto ocontent = p->loadBytes(digest);
 	if (!ocontent.has_value())
@@ -193,7 +210,7 @@ void Storage::Priv::storeBytes(const Digest & digest, const vector<uint8_t> & in
 	fs::rename(lock, path);
 }
 
-Ref Storage::store(const Object & object) const
+Ref Storage::storeObject(const Object & object) const
 {
 	// TODO: ensure storage transitively
 	auto content = object.encode();
@@ -207,6 +224,32 @@ Ref Storage::store(const Object & object) const
 	Digest digest(arr);
 	p->storeBytes(digest, content);
 	return Ref::create(*this, digest).value();
+}
+
+Ref Storage::storeObject(const class Record & val) const
+{ return storeObject(Object(val)); }
+
+Ref Storage::storeObject(const class Blob & val) const
+{ return storeObject(Object(val)); }
+
+void Storage::storeKey(Ref pubref, const vector<uint8_t> & key) const
+{
+	ofstream file(p->keyPath(pubref.digest()));
+	file.write((const char *) key.data(), key.size());
+}
+
+optional<vector<uint8_t>> Storage::loadKey(Ref pubref) const
+{
+	fs::path path = p->keyPath(pubref.digest());
+	std::error_code err;
+	size_t size = fs::file_size(path, err);
+	if (err)
+		return nullopt;
+
+	vector<uint8_t> key(size);
+	ifstream file(p->keyPath(pubref.digest()));
+	file.read((char *) key.data(), size);
+	return key;
 }
 
 
@@ -243,7 +286,7 @@ optional<Ref> Ref::create(Storage st, const Digest & digest)
 	};
 
 	p->object = std::async(std::launch::deferred, [p] {
-		auto obj = p->storage.load(p->digest);
+		auto obj = p->storage.loadObject(p->digest);
 		if (!obj.has_value())
 			throw runtime_error("failed to decode bytes");
 
@@ -266,6 +309,11 @@ const Object & Ref::operator*() const
 const Object * Ref::operator->() const
 {
 	return &p->object.get();
+}
+
+const Storage & Ref::storage() const
+{
+	return p->storage;
 }
 
 
@@ -305,6 +353,10 @@ optional<Ref> Record::Item::asRef() const
 
 Record::Record(const vector<Item> & from):
 	ptr(new vector<Item>(from))
+{}
+
+Record::Record(vector<Item> && from):
+	ptr(new vector<Item>(std::move(from)))
 {}
 
 Record Record::decode(Storage st,

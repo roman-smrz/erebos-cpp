@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <set>
+#include <stdexcept>
 
 using namespace erebos;
 
 using std::async;
 using std::nullopt;
+using std::runtime_error;
 using std::set;
 
 optional<Identity> Identity::load(const Ref & ref)
@@ -41,6 +43,63 @@ optional<Identity> Identity::owner() const
 	return p->owner;
 }
 
+optional<Ref> Identity::ref() const
+{
+	if (p->data.size() == 1)
+		return p->data[0].ref;
+	return nullopt;
+}
+
+Identity::Builder Identity::create(const Storage & st)
+{
+	return Builder (new Builder::Priv {
+		.storage = st,
+		.keyIdentity = SecretKey::generate(st).pub(),
+		.keyMessage = SecretKey::generate(st).pub(),
+	});
+}
+
+Identity::Builder Identity::modify() const
+{
+	return Builder (new Builder::Priv {
+		.storage = p->data[0].ref.storage(),
+		.prev = p->data,
+		.keyIdentity = p->data[0]->data->keyIdentity,
+		.keyMessage = p->data[0]->data->keyMessage,
+	});
+}
+
+
+Identity Identity::Builder::commit() const
+{
+	auto idata = p->storage.store(IdentityData {
+		.prev = p->prev,
+		.name = p->name,
+		.owner = p->owner && p->owner->p->data.size() == 1 ?
+			optional(p->owner->p->data[0]) : nullopt,
+		.keyIdentity = p->keyIdentity,
+		.keyMessage = p->keyMessage,
+	});
+
+	auto key = SecretKey::load(p->keyIdentity);
+	if (!key)
+		throw runtime_error("failed to load secret key");
+
+	auto sdata = key->sign(idata);
+
+	return Identity(Identity::Priv::validate({ sdata }));
+}
+
+void Identity::Builder::name(const string & val)
+{
+	p->name = val;
+}
+
+void Identity::Builder::owner(const Identity & val)
+{
+	p->owner.emplace(val);
+}
+
 optional<IdentityData> IdentityData::load(const Ref & ref)
 {
 	auto rec = ref->asRecord();
@@ -63,6 +122,23 @@ optional<IdentityData> IdentityData::load(const Ref & ref)
 		.keyIdentity = keyIdentity.value(),
 		.keyMessage = rec->item("key-msg").as<PublicKey>(),
 	};
+}
+
+Ref IdentityData::store(const Storage & st) const
+{
+	vector<Record::Item> items;
+
+	for (const auto p : prev)
+		items.emplace_back("SPREV", p.ref);
+	if (name)
+		items.emplace_back("name", *name);
+	if (owner)
+		items.emplace_back("owner", owner->ref);
+	items.emplace_back("key-id", keyIdentity.ref);
+	if (keyMessage)
+		items.emplace_back("key-msg", keyMessage->ref);
+
+	return st.storeObject(Record(std::move(items)));
 }
 
 bool Identity::Priv::verifySignatures(const Stored<Signed<IdentityData>> & sdata)

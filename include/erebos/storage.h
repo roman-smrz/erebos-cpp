@@ -23,9 +23,21 @@ public:
 	Storage & operator=(const Storage &) = delete;
 
 	static std::optional<Storage> open(std::filesystem::path path);
+
+	bool operator==(const Storage &) const;
+	bool operator!=(const Storage &) const;
+
 	std::optional<Ref> ref(const Digest &) const;
-	std::optional<Object> load(const Digest &) const;
-	Ref store(const Object &) const;
+
+	std::optional<Object> loadObject(const Digest &) const;
+	Ref storeObject(const Object &) const;
+	Ref storeObject(const class Record &) const;
+	Ref storeObject(const class Blob &) const;
+
+	template<typename T> Stored<T> store(const T &) const;
+
+	void storeKey(Ref pubref, const std::vector<uint8_t> &) const;
+	std::optional<std::vector<uint8_t>> loadKey(Ref pubref) const;
 
 private:
 	friend class Ref;
@@ -71,6 +83,8 @@ public:
 	const Object & operator*() const;
 	const Object * operator->() const;
 
+	const Storage & storage() const;
+
 private:
 	friend class Storage;
 	struct Priv;
@@ -94,6 +108,10 @@ public:
 			Item(name, std::monostate()) {}
 		Item(const std::string & name, Variant value):
 			name(name), value(value) {}
+		template<typename T>
+		Item(const std::string & name, const Stored<T> & value):
+			Item(name, value.ref) {}
+
 		Item(const Item &) = default;
 		Item & operator=(const Item &) = delete;
 
@@ -118,6 +136,7 @@ private:
 
 public:
 	Record(const std::vector<Item> &);
+	Record(std::vector<Item> &&);
 	std::vector<uint8_t> encode() const;
 
 	const std::vector<Item> & items() const;
@@ -192,8 +211,10 @@ template<typename T>
 class Stored
 {
 	Stored(Ref ref, std::shared_ptr<T> val): ref(ref), val(val) {}
+	friend class Storage;
 public:
 	static std::optional<Stored<T>> load(const Ref &);
+	Ref store(const Storage &) const;
 
 	bool operator==(const Stored<T> & other) const
 	{ return ref.digest() == other.ref.digest(); }
@@ -219,11 +240,25 @@ public:
 };
 
 template<typename T>
+Stored<T> Storage::store(const T & val) const
+{
+	return Stored(val.store(*this), std::make_shared<T>(val));
+}
+
+template<typename T>
 std::optional<Stored<T>> Stored<T>::load(const Ref & ref)
 {
 	if (auto val = T::load(ref))
 		return Stored(ref, std::make_shared<T>(val.value()));
 	return std::nullopt;
+}
+
+template<typename T>
+Ref Stored<T>::store(const Storage & st) const
+{
+	if (st == ref.storage())
+		return ref;
+	return st.storeObject(*ref);
 }
 
 template<typename T>

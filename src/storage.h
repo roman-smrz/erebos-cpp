@@ -19,6 +19,7 @@ struct Storage::Priv
 	fs::path root;
 
 	fs::path objectPath(const Digest &) const;
+	fs::path keyPath(const Digest &) const;
 	optional<vector<uint8_t>> loadBytes(const Digest &) const;
 	void storeBytes(const Digest &, const vector<uint8_t> &) const;
 };

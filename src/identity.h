@@ -14,6 +14,7 @@ class IdentityData
 {
 public:
 	static optional<IdentityData> load(const Ref &);
+	Ref store(const Storage & st) const;
 
 	const vector<Stored<Signed<IdentityData>>> prev;
 	const optional<string> name;
@@ -33,6 +34,17 @@ public:
 	static shared_ptr<Priv> validate(const vector<Stored<Signed<IdentityData>>> & sdata);
 	optional<Stored<IdentityData>> lookupProperty(
 			function<bool(const IdentityData &)> sel) const;
+};
+
+class Identity::Builder::Priv
+{
+public:
+	Storage storage;
+	vector<Stored<Signed<IdentityData>>> prev = {};
+	optional<string> name = nullopt;
+	optional<Identity> owner = nullopt;
+	Stored<PublicKey> keyIdentity;
+	optional<Stored<PublicKey>> keyMessage;
 };
 
 }
