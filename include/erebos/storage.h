@@ -124,10 +124,8 @@ public:
 
 		template<typename T> std::optional<Stored<T>> as() const;
 
-	private:
-		friend class Record;
-		std::string name;
-		Variant value;
+		const std::string name;
+		const Variant value;
 	};
 
 private:
