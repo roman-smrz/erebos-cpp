@@ -3,11 +3,13 @@
 #include "erebos/storage.h"
 
 #include <future>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
 using std::optional;
 using std::shared_future;
+using std::unordered_set;
 using std::vector;
 
 namespace erebos {
@@ -31,5 +33,7 @@ struct Ref::Priv
 
 	shared_future<Object> object;
 };
+
+vector<Stored<Object>> collectStoredObjects(const Stored<Object> &);
 
 }

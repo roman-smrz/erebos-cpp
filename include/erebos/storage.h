@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -183,7 +184,15 @@ public:
 	Object(Variants content): content(content) {}
 	Object & operator=(const Object &) = delete;
 
+	static std::optional<std::tuple<Object, std::vector<uint8_t>::const_iterator>>
+		decodePrefix(Storage, std::vector<uint8_t>::const_iterator,
+				std::vector<uint8_t>::const_iterator);
+
 	static std::optional<Object> decode(Storage, const std::vector<uint8_t> &);
+	static std::optional<Object> decode(Storage,
+			std::vector<uint8_t>::const_iterator,
+			std::vector<uint8_t>::const_iterator);
+	static std::vector<Object> decodeMany(Storage, const std::vector<uint8_t> &);
 	std::vector<uint8_t> encode() const;
 	static std::optional<Object> load(const Ref &);
 
@@ -296,4 +305,17 @@ bool Stored<T>::precedes(const Stored<T> & other) const
 	return false;
 }
 
+}
+
+namespace std
+{
+	template<> struct hash<erebos::Digest>
+	{
+		std::size_t operator()(const erebos::Digest & dgst) const noexcept
+		{
+			std::size_t res;
+			std::memcpy(&res, dgst.arr().data(), sizeof res);
+			return res;
+		}
+	};
 }

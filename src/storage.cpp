@@ -29,6 +29,7 @@ using std::runtime_error;
 using std::shared_ptr;
 using std::string;
 using std::to_string;
+using std::tuple;
 
 optional<Storage> Storage::open(fs::path path)
 {
@@ -492,29 +493,52 @@ Blob Blob::decode(Storage,
 	return Blob(make_shared<vector<uint8_t>>(begin, end));
 }
 
-
-optional<Object> Object::decode(Storage st, const vector<uint8_t> & data)
+optional<tuple<Object, vector<uint8_t>::const_iterator>>
+Object::decodePrefix(Storage st,
+		vector<uint8_t>::const_iterator begin,
+		vector<uint8_t>::const_iterator end)
 {
-	auto newline = std::find(data.begin(), data.end(), '\n');
-	if (newline == data.end())
+	auto newline = std::find(begin, end, '\n');
+	if (newline == end)
 		return nullopt;
 
-	auto space = std::find(data.begin(), newline, ' ');
+	auto space = std::find(begin, newline, ' ');
 	if (space == newline)
 		return nullopt;
 
 	ssize_t size = std::stoi(string(space + 1, newline));
-	if (data.end() - newline - 1 != size)
+	if (end - newline - 1 < size)
 		return nullopt;
+	auto cend = newline + 1 + size;
 
-	string type(data.begin(), space);
+	string type(begin, space);
+	optional<Object> obj;
 	if (type == "rec")
-		return Object(Record::decode(st, newline + 1, data.end()));
+		obj.emplace(Record::decode(st, newline + 1, cend));
 	else if (type == "blob")
-		return Object(Blob::decode(st, newline + 1, data.end()));
+		obj.emplace(Blob::decode(st, newline + 1, cend));
 	else
 		throw runtime_error("unknown object type '" + type + "'");
 
+	if (obj)
+		return std::make_tuple(*obj, cend);
+	return nullopt;
+}
+
+optional<Object> Object::decode(Storage st, const vector<uint8_t> & data)
+{
+	return decode(st, data.begin(), data.end());
+}
+
+optional<Object> Object::decode(Storage st,
+		vector<uint8_t>::const_iterator begin,
+		vector<uint8_t>::const_iterator end)
+{
+	if (auto res = decodePrefix(st, begin, end)) {
+		auto [obj, next] = *res;
+		if (next == end)
+			return obj;
+	}
 	return nullopt;
 }
 
@@ -562,4 +586,29 @@ optional<Blob> Object::asBlob() const
 	if (holds_alternative<Blob>(content))
 		return std::get<Blob>(content);
 	return nullopt;
+}
+
+vector<Stored<Object>> erebos::collectStoredObjects(const Stored<Object> & from)
+{
+	unordered_set<Digest> seen;
+	vector<Stored<Object>> queue { from };
+	vector<Stored<Object>> res;
+
+	while (!queue.empty()) {
+		auto cur = queue.back();
+		queue.pop_back();
+
+		auto [it, added] = seen.insert(cur.ref.digest());
+		if (!added)
+			continue;
+
+		res.push_back(cur);
+
+		if (auto rec = cur->asRecord())
+			for (const auto & item : rec->items())
+				if (auto ref = item.asRef())
+					queue.push_back(*Stored<Object>::load(*ref));
+	}
+
+	return res;
 }
