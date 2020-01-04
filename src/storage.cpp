@@ -21,7 +21,9 @@ using std::array;
 using std::copy;
 using std::holds_alternative;
 using std::ifstream;
+using std::is_same_v;
 using std::make_shared;
+using std::make_unique;
 using std::monostate;
 using std::nullopt;
 using std::ofstream;
@@ -31,7 +33,8 @@ using std::string;
 using std::to_string;
 using std::tuple;
 
-optional<Storage> Storage::open(fs::path path)
+FilesystemStorage::FilesystemStorage(const fs::path & path):
+	root(path)
 {
 	if (!fs::is_directory(path))
 		fs::create_directory(path);
@@ -41,42 +44,16 @@ optional<Storage> Storage::open(fs::path path)
 
 	if (!fs::is_directory(path/"heads"))
 		fs::create_directory(path/"heads");
-
-	return Storage(shared_ptr<const Priv>(new Priv { path }));
 }
 
-bool Storage::operator==(const Storage & other) const
+bool FilesystemStorage::contains(const Digest & digest) const
 {
-	return p == other.p;
+	return fs::exists(objectPath(digest));
 }
 
-bool Storage::operator!=(const Storage & other) const
+optional<vector<uint8_t>> FilesystemStorage::loadBytes(const Digest & digest) const
 {
-	return p != other.p;
-}
-
-fs::path Storage::Priv::objectPath(const Digest & digest) const
-{
-	string name(digest);
-	return root/"objects"/
-		fs::path(name.begin(), name.begin() + 2)/
-		fs::path(name.begin() + 2, name.end());
-}
-
-fs::path Storage::Priv::keyPath(const Digest & digest) const
-{
-	string name(digest);
-	return root/"keys"/fs::path(name.begin(), name.end());
-}
-
-optional<Ref> Storage::ref(const Digest & digest) const
-{
-	return Ref::create(*this, digest);
-}
-
-optional<vector<uint8_t>> Storage::Priv::loadBytes(const Digest & digest) const
-{
-	vector<uint8_t> in(Priv::CHUNK);
+	vector<uint8_t> in(CHUNK);
 	vector<uint8_t> out;
 	size_t decoded = 0;
 
@@ -133,25 +110,9 @@ optional<vector<uint8_t>> Storage::Priv::loadBytes(const Digest & digest) const
 	return out;
 }
 
-optional<Object> Storage::loadObject(const Digest & digest) const
+void FilesystemStorage::storeBytes(const Digest & digest, const vector<uint8_t> & in)
 {
-	auto ocontent = p->loadBytes(digest);
-	if (!ocontent.has_value())
-		return nullopt;
-	auto content = ocontent.value();
-
-	array<uint8_t, Digest::size> arr;
-	int ret = blake2b(arr.data(), content.data(), nullptr,
-			Digest::size, content.size(), 0);
-	if (ret != 0 || digest != Digest(arr))
-		throw runtime_error("digest verification failed");
-
-	return Object::decode(*this, content);
-}
-
-void Storage::Priv::storeBytes(const Digest & digest, const vector<uint8_t> & in) const
-{
-	vector<uint8_t> out(Priv::CHUNK);
+	vector<uint8_t> out(CHUNK);
 
 	z_stream strm;
 	strm.zalloc = Z_NULL;
@@ -211,6 +172,180 @@ void Storage::Priv::storeBytes(const Digest & digest, const vector<uint8_t> & in
 	fs::rename(lock, path);
 }
 
+optional<vector<uint8_t>> FilesystemStorage::loadKey(const Digest & pubref) const
+{
+	fs::path path = keyPath(pubref);
+	std::error_code err;
+	size_t size = fs::file_size(path, err);
+	if (err)
+		return nullopt;
+
+	vector<uint8_t> key(size);
+	ifstream file(keyPath(pubref));
+	file.read((char *) key.data(), size);
+	return key;
+}
+
+void FilesystemStorage::storeKey(const Digest & pubref, const vector<uint8_t> & key)
+{
+	fs::path path = keyPath(pubref);
+	fs::create_directories(path.parent_path());
+	ofstream file(path);
+	file.write((const char *) key.data(), key.size());
+}
+
+fs::path FilesystemStorage::objectPath(const Digest & digest) const
+{
+	string name(digest);
+	return root/"objects"/
+		fs::path(name.begin(), name.begin() + 2)/
+		fs::path(name.begin() + 2, name.end());
+}
+
+fs::path FilesystemStorage::keyPath(const Digest & digest) const
+{
+	string name(digest);
+	return root/"keys"/fs::path(name.begin(), name.end());
+}
+
+bool MemoryStorage::contains(const Digest & digest) const
+{
+	return storage.find(digest) != storage.end();
+}
+
+optional<vector<uint8_t>> MemoryStorage::loadBytes(const Digest & digest) const
+{
+	auto it = storage.find(digest);
+	if (it != storage.end())
+		return it->second;
+	return nullopt;
+}
+
+void MemoryStorage::storeBytes(const Digest & digest, const vector<uint8_t> & content)
+{
+	storage.emplace(digest, content);
+}
+
+optional<vector<uint8_t>> MemoryStorage::loadKey(const Digest & digest) const
+{
+	auto it = keys.find(digest);
+	if (it != keys.end())
+		return it->second;
+	return nullopt;
+}
+
+void MemoryStorage::storeKey(const Digest & digest, const vector<uint8_t> & content)
+{
+	keys.emplace(digest, content);
+}
+
+bool ChainStorage::contains(const Digest & digest) const
+{
+	return storage->contains(digest) ||
+		(parent && parent->contains(digest));
+}
+
+optional<vector<uint8_t>> ChainStorage::loadBytes(const Digest & digest) const
+{
+	if (auto res = storage->loadBytes(digest))
+		return res;
+	if (parent)
+		return parent->loadBytes(digest);
+	return nullopt;
+}
+
+void ChainStorage::storeBytes(const Digest & digest, const vector<uint8_t> & content)
+{
+	storage->storeBytes(digest, content);
+}
+
+optional<vector<uint8_t>> ChainStorage::loadKey(const Digest & digest) const
+{
+	if (auto res = storage->loadKey(digest))
+		return res;
+	if (parent)
+		return parent->loadKey(digest);
+	return nullopt;
+}
+
+void ChainStorage::storeKey(const Digest & digest, const vector<uint8_t> & content)
+{
+	storage->storeKey(digest, content);
+}
+
+
+Storage::Storage(const fs::path & path):
+	PartialStorage(shared_ptr<Priv>(new Priv { .backend = make_shared<FilesystemStorage>(path) }))
+{}
+
+Storage Storage::deriveEphemeralStorage() const
+{
+	return Storage(shared_ptr<Priv>(new Priv { .backend =
+		make_shared<ChainStorage>(
+				make_shared<MemoryStorage>(),
+				make_unique<ChainStorage>(p->backend)
+				)}));
+}
+
+PartialStorage Storage::derivePartialStorage() const
+{
+	return PartialStorage(shared_ptr<Priv>(new Priv { .backend =
+		make_shared<ChainStorage>(
+				make_shared<MemoryStorage>(),
+				make_unique<ChainStorage>(p->backend)
+				)}));
+}
+
+bool PartialStorage::operator==(const PartialStorage & other) const
+{
+	return p == other.p;
+}
+
+bool PartialStorage::operator!=(const PartialStorage & other) const
+{
+	return p != other.p;
+}
+
+PartialRef PartialStorage::ref(const Digest & digest) const
+{
+	return PartialRef::create(*this, digest);
+}
+
+optional<Ref> Storage::ref(const Digest & digest) const
+{
+	return Ref::create(*this, digest);
+}
+
+optional<vector<uint8_t>> PartialStorage::Priv::loadBytes(const Digest & digest) const
+{
+	auto ocontent = backend->loadBytes(digest);
+	if (!ocontent.has_value())
+		return nullopt;
+	auto content = ocontent.value();
+
+	array<uint8_t, Digest::size> arr;
+	int ret = blake2b(arr.data(), content.data(), nullptr,
+			Digest::size, content.size(), 0);
+	if (ret != 0 || digest != Digest(arr))
+		throw runtime_error("digest verification failed");
+
+	return content;
+}
+
+optional<PartialObject> PartialStorage::loadObject(const Digest & digest) const
+{
+	if (auto content = p->loadBytes(digest))
+		return PartialObject::decode(*this, *content);
+	return nullopt;
+}
+
+optional<Object> Storage::loadObject(const Digest & digest) const
+{
+	if (auto content = p->loadBytes(digest))
+		return Object::decode(*this, *content);
+	return nullopt;
+}
+
 Ref Storage::storeObject(const Object & object) const
 {
 	// TODO: ensure storage transitively
@@ -223,34 +358,24 @@ Ref Storage::storeObject(const Object & object) const
 		throw runtime_error("failed to compute digest");
 
 	Digest digest(arr);
-	p->storeBytes(digest, content);
+	p->backend->storeBytes(digest, content);
 	return Ref::create(*this, digest).value();
 }
 
-Ref Storage::storeObject(const class Record & val) const
+Ref Storage::storeObject(const Record & val) const
 { return storeObject(Object(val)); }
 
-Ref Storage::storeObject(const class Blob & val) const
+Ref Storage::storeObject(const Blob & val) const
 { return storeObject(Object(val)); }
 
 void Storage::storeKey(Ref pubref, const vector<uint8_t> & key) const
 {
-	ofstream file(p->keyPath(pubref.digest()));
-	file.write((const char *) key.data(), key.size());
+	p->backend->storeKey(pubref.digest(), key);
 }
 
 optional<vector<uint8_t>> Storage::loadKey(Ref pubref) const
 {
-	fs::path path = p->keyPath(pubref.digest());
-	std::error_code err;
-	size_t size = fs::file_size(path, err);
-	if (err)
-		return nullopt;
-
-	vector<uint8_t> key(size);
-	ifstream file(p->keyPath(pubref.digest()));
-	file.read((char *) key.data(), size);
-	return key;
+	return p->backend->loadKey(pubref.digest());
 }
 
 
@@ -276,92 +401,125 @@ Digest::operator string() const
 }
 
 
-optional<Ref> Ref::create(Storage st, const Digest & digest)
+PartialRef PartialRef::create(PartialStorage st, const Digest & digest)
 {
-	if (!fs::exists(st.p->objectPath(digest)))
-		return nullopt;
-
 	auto p = new Priv {
-		.storage = st,
+		.storage = make_unique<PartialStorage>(st),
 		.digest = digest,
-		.object = {},
 	};
 
-	p->object = std::async(std::launch::deferred, [p] {
-		auto obj = p->storage.loadObject(p->digest);
-		if (!obj.has_value())
-			throw runtime_error("failed to decode bytes");
-
-		return obj.value();
-	});
-
-	return Ref(shared_ptr<Priv>(p));
+	return PartialRef(shared_ptr<Priv>(p));
 }
 
-const Digest & Ref::digest() const
+const Digest & PartialRef::digest() const
 {
 	return p->digest;
 }
 
-const Object & Ref::operator*() const
+PartialRef::operator bool() const
 {
-	return p->object.get();
+	return storage().p->backend->contains(p->digest);
 }
 
-const Object * Ref::operator->() const
+const PartialObject PartialRef::operator*() const
 {
-	return &p->object.get();
+	if (auto res = p->storage->loadObject(p->digest))
+		return *res;
+	throw runtime_error("failed to load object from partial storage");
+}
+
+unique_ptr<PartialObject> PartialRef::operator->() const
+{
+	return make_unique<PartialObject>(**this);
+}
+
+const PartialStorage & PartialRef::storage() const
+{
+	return *p->storage;
+}
+
+optional<Ref> Ref::create(Storage st, const Digest & digest)
+{
+	if (!st.p->backend->contains(digest))
+		return nullopt;
+
+	auto p = new Priv {
+		.storage = make_unique<PartialStorage>(st),
+		.digest = digest,
+	};
+
+	return Ref(shared_ptr<Priv>(p));
+}
+
+const Object Ref::operator*() const
+{
+	if (auto res = static_cast<Storage*>(p->storage.get())->loadObject(p->digest))
+		return *res;
+	throw runtime_error("falied to load object - corrupted storage");
+}
+
+unique_ptr<Object> Ref::operator->() const
+{
+	return make_unique<Object>(**this);
 }
 
 const Storage & Ref::storage() const
 {
-	return p->storage;
+	return *static_cast<const Storage*>(p->storage.get());
 }
 
 
-Record::Item::operator bool() const
+template<class S>
+RecordT<S>::Item::operator bool() const
 {
 	return !holds_alternative<monostate>(value);
 }
 
-optional<int> Record::Item::asInteger() const
+template<class S>
+optional<int> RecordT<S>::Item::asInteger() const
 {
 	if (holds_alternative<int>(value))
 		return std::get<int>(value);
 	return nullopt;
 }
 
-optional<string> Record::Item::asText() const
+template<class S>
+optional<string> RecordT<S>::Item::asText() const
 {
 	if (holds_alternative<string>(value))
 		return std::get<string>(value);
 	return nullopt;
 }
 
-optional<vector<uint8_t>> Record::Item::asBinary() const
+template<class S>
+optional<vector<uint8_t>> RecordT<S>::Item::asBinary() const
 {
 	if (holds_alternative<vector<uint8_t>>(value))
 		return std::get<vector<uint8_t>>(value);
 	return nullopt;
 }
 
-optional<Ref> Record::Item::asRef() const
+template<class S>
+optional<typename S::Ref> RecordT<S>::Item::asRef() const
 {
-	if (holds_alternative<Ref>(value))
-		return std::get<Ref>(value);
+	if (holds_alternative<typename S::Ref>(value))
+		return std::get<typename S::Ref>(value);
 	return nullopt;
 }
 
 
-Record::Record(const vector<Item> & from):
+template<class S>
+RecordT<S>::RecordT(const vector<Item> & from):
 	ptr(new vector<Item>(from))
 {}
 
-Record::Record(vector<Item> && from):
+template<class S>
+RecordT<S>::RecordT(vector<Item> && from):
 	ptr(new vector<Item>(std::move(from)))
 {}
 
-Record Record::decode(Storage st,
+template<class S>
+optional<RecordT<S>> RecordT<S>::decode(const S & st,
 		vector<uint8_t>::const_iterator begin,
 		vector<uint8_t>::const_iterator end)
 {
@@ -390,28 +548,38 @@ Record Record::decode(Storage st,
 			items->emplace_back(name, value);
 		else if (type == "b")
 			items->emplace_back(name, base64::decode(value));
-		else if (type == "r.b2")
-			items->emplace_back(name, Ref::create(st, Digest(value)).value());
-		else
+		else if (type == "r.b2") {
+			if constexpr (is_same_v<S, Storage>) {
+				if (auto ref = st.ref(Digest(value)))
+					items->emplace_back(name, ref.value());
+				else
+					return nullopt;
+			} else if constexpr (std::is_same_v<S, PartialStorage>) {
+				items->emplace_back(name, st.ref(Digest(value)));
+			}
+		} else
 			throw runtime_error("unknown record item type");
 
 		begin = newline + 1;
 	}
 
-	return Record(items);
+	return RecordT<S>(items);
 }
 
-vector<uint8_t> Record::encode() const
+template<class S>
+vector<uint8_t> RecordT<S>::encode() const
 {
-	return Object(*this).encode();
+	return ObjectT<S>(*this).encode();
 }
 
-const vector<Record::Item> & Record::items() const
+template<class S>
+const vector<typename RecordT<S>::Item> & RecordT<S>::items() const
 {
 	return *ptr;
 }
 
-Record::Item Record::item(const string & name) const
+template<class S>
+typename RecordT<S>::Item RecordT<S>::item(const string & name) const
 {
 	for (auto item : *ptr) {
 		if (item.name == name)
@@ -420,12 +588,14 @@ Record::Item Record::item(const string & name) const
 	return Item("", monostate());
 }
 
-Record::Item Record::operator[](const string & name) const
+template<class S>
+typename RecordT<S>::Item RecordT<S>::operator[](const string & name) const
 {
 	return item(name);
 }
 
-vector<Record::Item> Record::items(const string & name) const
+template<class S>
+vector<typename RecordT<S>::Item> RecordT<S>::items(const string & name) const
 {
 	vector<Item> res;
 	for (auto item : *ptr) {
@@ -435,8 +605,8 @@ vector<Record::Item> Record::items(const string & name) const
 	return res;
 }
 
-
-vector<uint8_t> Record::encodeInner() const
+template<class S>
+vector<uint8_t> RecordT<S>::encodeInner() const
 {
 	vector<uint8_t> res;
 	auto inserter = std::back_inserter(res);
@@ -471,6 +641,9 @@ vector<uint8_t> Record::encodeInner() const
 	return res;
 }
 
+template class RecordT<Storage>;
+template class RecordT<PartialStorage>;
+
 
 Blob::Blob(const vector<uint8_t> & vec):
 	ptr(make_shared<vector<uint8_t>>(vec))
@@ -486,15 +659,16 @@ vector<uint8_t> Blob::encodeInner() const
 	return *ptr;
 }
 
-Blob Blob::decode(Storage,
+Blob Blob::decode(
 		vector<uint8_t>::const_iterator begin,
 		vector<uint8_t>::const_iterator end)
 {
 	return Blob(make_shared<vector<uint8_t>>(begin, end));
 }
 
-optional<tuple<Object, vector<uint8_t>::const_iterator>>
-Object::decodePrefix(Storage st,
+template<class S>
+optional<tuple<ObjectT<S>, vector<uint8_t>::const_iterator>>
+ObjectT<S>::decodePrefix(const S & st,
 		vector<uint8_t>::const_iterator begin,
 		vector<uint8_t>::const_iterator end)
 {
@@ -512,11 +686,14 @@ Object::decodePrefix(Storage st,
 	auto cend = newline + 1 + size;
 
 	string type(begin, space);
-	optional<Object> obj;
+	optional<ObjectT<S>> obj;
 	if (type == "rec")
-		obj.emplace(Record::decode(st, newline + 1, cend));
+		if (auto rec = RecordT<S>::decode(st, newline + 1, cend))
+			obj.emplace(*rec);
+		else
+			return nullopt;
 	else if (type == "blob")
-		obj.emplace(Blob::decode(st, newline + 1, cend));
+		obj.emplace(Blob::decode(newline + 1, cend));
 	else
 		throw runtime_error("unknown object type '" + type + "'");
 
@@ -525,12 +702,14 @@ Object::decodePrefix(Storage st,
 	return nullopt;
 }
 
-optional<Object> Object::decode(Storage st, const vector<uint8_t> & data)
+template<class S>
+optional<ObjectT<S>> ObjectT<S>::decode(const S & st, const vector<uint8_t> & data)
 {
 	return decode(st, data.begin(), data.end());
 }
 
-optional<Object> Object::decode(Storage st,
+template<class S>
+optional<ObjectT<S>> ObjectT<S>::decode(const S & st,
 		vector<uint8_t>::const_iterator begin,
 		vector<uint8_t>::const_iterator end)
 {
@@ -542,7 +721,8 @@ optional<Object> Object::decode(Storage st,
 	return nullopt;
 }
 
-vector<uint8_t> Object::encode() const
+template<class S>
+vector<uint8_t> ObjectT<S>::encode() const
 {
 	vector<uint8_t> res, inner;
 	string type;
@@ -569,24 +749,32 @@ vector<uint8_t> Object::encode() const
 	return res;
 }
 
-optional<Object> Object::load(const Ref & ref)
+template<class S>
+optional<ObjectT<S>> ObjectT<S>::load(const typename S::Ref & ref)
 {
-	return *ref;
-}
-
-optional<Record> Object::asRecord() const
-{
-	if (holds_alternative<Record>(content))
-		return std::get<Record>(content);
+	if (ref)
+		return *ref;
 	return nullopt;
 }
 
-optional<Blob> Object::asBlob() const
+template<class S>
+optional<RecordT<S>> ObjectT<S>::asRecord() const
+{
+	if (holds_alternative<RecordT<S>>(content))
+		return std::get<RecordT<S>>(content);
+	return nullopt;
+}
+
+template<class S>
+optional<Blob> ObjectT<S>::asBlob() const
 {
 	if (holds_alternative<Blob>(content))
 		return std::get<Blob>(content);
 	return nullopt;
 }
+
+template class ObjectT<Storage>;
+template class ObjectT<PartialStorage>;
 
 vector<Stored<Object>> erebos::collectStoredObjects(const Stored<Object> & from)
 {

@@ -12,39 +12,75 @@
 namespace erebos {
 
 class Storage;
+class PartialStorage;
 class Digest;
 class Ref;
-class Object;
+class PartialRef;
+
+template<class S> class RecordT;
+typedef RecordT<Storage> Record;
+typedef RecordT<PartialStorage> PartialRecord;
+template<class S> class ObjectT;
+typedef ObjectT<Storage> Object;
+typedef ObjectT<PartialStorage> PartialObject;
+class Blob;
+
 template<typename T> class Stored;
 
-class Storage
+class PartialStorage
 {
 public:
+	typedef erebos::PartialRef Ref;
+
+	PartialStorage(const PartialStorage &) = default;
+	PartialStorage & operator=(const PartialStorage &) = default;
+	virtual ~PartialStorage() = default;
+
+	bool operator==(const PartialStorage &) const;
+	bool operator!=(const PartialStorage &) const;
+
+	PartialRef ref(const Digest &) const;
+
+	std::optional<PartialObject> loadObject(const Digest &) const;
+	PartialRef storeObject(const PartialObject &) const;
+	PartialRef storeObject(const PartialRecord &) const;
+	PartialRef storeObject(const Blob &) const;
+
+protected:
+	friend class Storage;
+	friend erebos::Ref;
+	friend erebos::PartialRef;
+	struct Priv;
+	const std::shared_ptr<const Priv> p;
+	PartialStorage(const std::shared_ptr<const Priv> p): p(p) {}
+};
+
+class Storage : public PartialStorage
+{
+public:
+	typedef erebos::Ref Ref;
+
+	Storage(const std::filesystem::path &);
 	Storage(const Storage &) = default;
-	Storage & operator=(const Storage &) = delete;
+	Storage & operator=(const Storage &) = default;
 
-	static std::optional<Storage> open(std::filesystem::path path);
-
-	bool operator==(const Storage &) const;
-	bool operator!=(const Storage &) const;
+	Storage deriveEphemeralStorage() const;
+	PartialStorage derivePartialStorage() const;
 
 	std::optional<Ref> ref(const Digest &) const;
 
 	std::optional<Object> loadObject(const Digest &) const;
 	Ref storeObject(const Object &) const;
-	Ref storeObject(const class Record &) const;
-	Ref storeObject(const class Blob &) const;
+	Ref storeObject(const Record &) const;
+	Ref storeObject(const Blob &) const;
 
 	template<typename T> Stored<T> store(const T &) const;
 
 	void storeKey(Ref pubref, const std::vector<uint8_t> &) const;
 	std::optional<std::vector<uint8_t>> loadKey(Ref pubref) const;
 
-private:
-	friend class Ref;
-	struct Priv;
-	const std::shared_ptr<const Priv> p;
-	Storage(const std::shared_ptr<const Priv> p): p(p) {}
+protected:
+	Storage(const std::shared_ptr<const Priv> p): PartialStorage(p) {}
 };
 
 class Digest
@@ -72,28 +108,49 @@ private:
 	std::array<uint8_t, size> value;
 };
 
-class Ref
+class PartialRef
 {
 public:
-	Ref(const Ref &) = default;
-	Ref & operator=(const Ref &) = delete;
+	PartialRef(const PartialRef &) = default;
+	PartialRef & operator=(const PartialRef &) = default;
 
-	static std::optional<Ref> create(Storage, const Digest &);
+	static PartialRef create(PartialStorage, const Digest &);
 
 	const Digest & digest() const;
-	const Object & operator*() const;
-	const Object * operator->() const;
 
-	const Storage & storage() const;
+	operator bool() const;
+	const PartialObject operator*() const;
+	std::unique_ptr<PartialObject> operator->() const;
 
-private:
+	const PartialStorage & storage() const;
+
+protected:
 	friend class Storage;
 	struct Priv;
 	const std::shared_ptr<const Priv> p;
-	Ref(const std::shared_ptr<const Priv> p): p(p) {}
+	PartialRef(const std::shared_ptr<const Priv> p): p(p) {}
 };
 
-class Record
+class Ref : public PartialRef
+{
+public:
+	Ref(const Ref &) = default;
+	Ref & operator=(const Ref &) = default;
+
+	static std::optional<Ref> create(Storage, const Digest &);
+
+	constexpr operator bool() const { return true; }
+	const Object operator*() const;
+	std::unique_ptr<Object> operator->() const;
+
+	const Storage & storage() const;
+
+protected:
+	Ref(const std::shared_ptr<const Priv> p): PartialRef(p) {}
+};
+
+template<class S>
+class RecordT
 {
 public:
 	class Item {
@@ -103,7 +160,7 @@ public:
 			int,
 			std::string,
 			std::vector<uint8_t>,
-			Ref> Variant;
+			typename S::Ref> Variant;
 
 		Item(const std::string & name):
 			Item(name, std::monostate()) {}
@@ -121,7 +178,7 @@ public:
 		std::optional<int> asInteger() const;
 		std::optional<std::string> asText() const;
 		std::optional<std::vector<uint8_t>> asBinary() const;
-		std::optional<Ref> asRef() const;
+		std::optional<typename S::Ref> asRef() const;
 
 		template<typename T> std::optional<Stored<T>> as() const;
 
@@ -130,12 +187,12 @@ public:
 	};
 
 private:
-	Record(const std::shared_ptr<std::vector<Item>> & ptr):
+	RecordT(const std::shared_ptr<std::vector<Item>> & ptr):
 		ptr(ptr) {}
 
 public:
-	Record(const std::vector<Item> &);
-	Record(std::vector<Item> &&);
+	RecordT(const std::vector<Item> &);
+	RecordT(std::vector<Item> &&);
 	std::vector<uint8_t> encode() const;
 
 	const std::vector<Item> & items() const;
@@ -144,14 +201,17 @@ public:
 	std::vector<Item> items(const std::string & name) const;
 
 private:
-	friend class Object;
+	friend ObjectT<S>;
 	std::vector<uint8_t> encodeInner() const;
-	static Record decode(Storage,
+	static std::optional<RecordT<S>> decode(const S &,
 			std::vector<uint8_t>::const_iterator,
 			std::vector<uint8_t>::const_iterator);
 
 	const std::shared_ptr<const std::vector<Item>> ptr;
 };
+
+extern template class RecordT<Storage>;
+extern template class RecordT<PartialStorage>;
 
 class Blob
 {
@@ -162,9 +222,10 @@ public:
 	std::vector<uint8_t> encode() const;
 
 private:
-	friend class Object;
+	friend Object;
+	friend PartialObject;
 	std::vector<uint8_t> encodeInner() const;
-	static Blob decode(Storage,
+	static Blob decode(
 			std::vector<uint8_t>::const_iterator,
 			std::vector<uint8_t>::const_iterator);
 
@@ -173,41 +234,47 @@ private:
 	const std::shared_ptr<const std::vector<uint8_t>> ptr;
 };
 
-class Object
+template<class S>
+class ObjectT
 {
 public:
 	typedef std::variant<
-		Record,
+		RecordT<S>,
 		Blob> Variants;
 
-	Object(const Object &) = default;
-	Object(Variants content): content(content) {}
-	Object & operator=(const Object &) = delete;
+	ObjectT(const ObjectT<S> &) = default;
+	ObjectT(Variants content): content(content) {}
+	ObjectT<S> & operator=(const ObjectT<S> &) = default;
 
-	static std::optional<std::tuple<Object, std::vector<uint8_t>::const_iterator>>
-		decodePrefix(Storage, std::vector<uint8_t>::const_iterator,
+	static std::optional<std::tuple<ObjectT<S>, std::vector<uint8_t>::const_iterator>>
+		decodePrefix(const S &,
+				std::vector<uint8_t>::const_iterator,
 				std::vector<uint8_t>::const_iterator);
 
-	static std::optional<Object> decode(Storage, const std::vector<uint8_t> &);
-	static std::optional<Object> decode(Storage,
+	static std::optional<ObjectT<S>> decode(const S &, const std::vector<uint8_t> &);
+	static std::optional<ObjectT<S>> decode(const S &,
 			std::vector<uint8_t>::const_iterator,
 			std::vector<uint8_t>::const_iterator);
-	static std::vector<Object> decodeMany(Storage, const std::vector<uint8_t> &);
+	static std::vector<ObjectT<S>> decodeMany(const S &, const std::vector<uint8_t> &);
 	std::vector<uint8_t> encode() const;
-	static std::optional<Object> load(const Ref &);
+	static std::optional<ObjectT<S>> load(const typename S::Ref &);
 
-	std::optional<Record> asRecord() const;
+	std::optional<RecordT<S>> asRecord() const;
 	std::optional<Blob> asBlob() const;
 
 private:
-	friend class Record;
-	friend class Blob;
+	friend RecordT<S>;
+	friend Blob;
 
 	Variants content;
 };
 
+extern template class ObjectT<Storage>;
+extern template class ObjectT<PartialStorage>;
+
+template<class S>
 template<typename T>
-std::optional<Stored<T>> Record::Item::as() const
+std::optional<Stored<T>> RecordT<S>::Item::as() const
 {
 	if (auto ref = asRef())
 		return Stored<T>::load(ref.value());
