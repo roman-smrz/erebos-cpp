@@ -88,11 +88,12 @@ void Server::Priv::doListen()
 		if (ret < 0)
 			throw std::system_error(errno, std::generic_category());
 
-		if (auto dec = Object::decodePrefix(self.ref()->storage(),
+		auto peer = getPeer(paddr);
+		if (auto dec = PartialObject::decodePrefix(peer.partStorage,
 				buf.begin(), buf.begin() + ret)) {
-			if (auto header = TransportHeader::load(std::get<Object>(*dec))) {
+			if (auto header = TransportHeader::load(std::get<PartialObject>(*dec))) {
 				scoped_lock<mutex> hlock(dataMutex);
-				handlePacket(getPeer(paddr), *header);
+				handlePacket(peer, *header);
 			}
 		}
 
@@ -113,7 +114,7 @@ void Server::Priv::doAnnounce()
 				{ TransportHeader::Type::AnnounceSelf, *self.ref() }
 			});
 
-			vector<uint8_t> bytes = header.store(self.ref()->storage())->encode();
+			vector<uint8_t> bytes = header.toObject().encode();
 
 			for (const auto & in : bcastAddresses) {
 				sockaddr_in sin = {};
@@ -136,7 +137,13 @@ Peer & Server::Priv::getPeer(const sockaddr_in & paddr)
 		if (memcmp(&peer->addr, &paddr, sizeof paddr) == 0)
 			return *peer;
 
-	Peer * peer = new Peer { .sock = sock, .addr = paddr };
+	auto st = self.ref()->storage().deriveEphemeralStorage();
+	Peer * peer = new Peer {
+		.sock = sock,
+		.addr = paddr,
+		.tempStorage = st,
+		.partStorage = st.derivePartialStorage(),
+		};
 	peers.emplace_back(peer);
 	return *peer;
 }
@@ -153,10 +160,12 @@ void Server::Priv::handlePacket(Peer & peer, const TransportHeader & header)
 			break;
 
 		case TransportHeader::Type::DataRequest: {
-			auto ref = std::get<Ref>(item.value);
-			if (plaintextRefs.find(ref.digest()) != plaintextRefs.end()) {
-				TransportHeader::Item hitem { TransportHeader::Type::DataResponse, ref };
-				peer.send(TransportHeader({ hitem }), { *ref });
+			auto pref = std::get<PartialRef>(item.value);
+			if (plaintextRefs.find(pref.digest()) != plaintextRefs.end()) {
+				if (auto ref = peer.tempStorage.ref(pref.digest())) {
+					TransportHeader::Item hitem { TransportHeader::Type::DataResponse, *ref };
+					peer.send(TransportHeader({ hitem }), { **ref });
+				}
 			}
 			break;
 		}
@@ -201,12 +210,12 @@ void Peer::send(const TransportHeader & header, const vector<Object> & objs)
 			(sockaddr *) &addr, sizeof(addr));
 }
 
-optional<TransportHeader> TransportHeader::load(const Ref & ref)
+optional<TransportHeader> TransportHeader::load(const PartialRef & ref)
 {
 	return load(*ref);
 }
 
-optional<TransportHeader> TransportHeader::load(const Object & obj)
+optional<TransportHeader> TransportHeader::load(const PartialObject & obj)
 {
 	auto rec = obj.asRecord();
 	if (!rec)
@@ -274,38 +283,38 @@ optional<TransportHeader> TransportHeader::load(const Object & obj)
 	return TransportHeader { .items = items };
 }
 
-Object TransportHeader::toObject() const
+PartialObject TransportHeader::toObject() const
 {
-	vector<Record::Item> ritems;
+	vector<PartialRecord::Item> ritems;
 
 	for (const auto & item : items) {
 		switch (item.type) {
 		case Type::Acknowledged:
-			ritems.emplace_back("ACK", std::get<Ref>(item.value));
+			ritems.emplace_back("ACK", std::get<PartialRef>(item.value));
 			break;
 
 		case Type::DataRequest:
-			ritems.emplace_back("REQ", std::get<Ref>(item.value));
+			ritems.emplace_back("REQ", std::get<PartialRef>(item.value));
 			break;
 
 		case Type::DataResponse:
-			ritems.emplace_back("RSP", std::get<Ref>(item.value));
+			ritems.emplace_back("RSP", std::get<PartialRef>(item.value));
 			break;
 
 		case Type::AnnounceSelf:
-			ritems.emplace_back("ANN", std::get<Ref>(item.value));
+			ritems.emplace_back("ANN", std::get<PartialRef>(item.value));
 			break;
 
 		case Type::AnnounceUpdate:
-			ritems.emplace_back("ANU", std::get<Ref>(item.value));
+			ritems.emplace_back("ANU", std::get<PartialRef>(item.value));
 			break;
 
 		case Type::ChannelRequest:
-			ritems.emplace_back("CRQ", std::get<Ref>(item.value));
+			ritems.emplace_back("CRQ", std::get<PartialRef>(item.value));
 			break;
 
 		case Type::ChannelAccept:
-			ritems.emplace_back("CAC", std::get<Ref>(item.value));
+			ritems.emplace_back("CAC", std::get<PartialRef>(item.value));
 			break;
 
 		case Type::ServiceType:
@@ -313,16 +322,10 @@ Object TransportHeader::toObject() const
 			break;
 
 		case Type::ServiceRef:
-			ritems.emplace_back("SRF", std::get<Ref>(item.value));
+			ritems.emplace_back("SRF", std::get<PartialRef>(item.value));
 			break;
 		}
 	}
 
-	return Object(Record(std::move(ritems)));
-}
-
-Ref TransportHeader::store(const Storage & st) const
-{
-
-	return st.storeObject(toObject());
+	return PartialObject(PartialRecord(std::move(ritems)));
 }

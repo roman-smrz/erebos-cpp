@@ -28,6 +28,9 @@ struct Peer
 	const int sock;
 	const sockaddr_in addr;
 
+	Storage tempStorage;
+	PartialStorage partStorage;
+
 	void send(const struct TransportHeader &, const vector<Object> &);
 };
 
@@ -47,14 +50,13 @@ struct TransportHeader
 
 	struct Item {
 		const Type type;
-		const variant<Ref, string> value;
+		const variant<PartialRef, string> value;
 	};
 
 	TransportHeader(const vector<Item> & items): items(items) {}
-	static optional<TransportHeader> load(const Ref &);
-	static optional<TransportHeader> load(const Object &);
-	Object toObject() const;
-	Ref store(const Storage & st) const;
+	static optional<TransportHeader> load(const PartialRef &);
+	static optional<TransportHeader> load(const PartialObject &);
+	PartialObject toObject() const;
 
 	const vector<Item> items;
 };
