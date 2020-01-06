@@ -74,6 +74,11 @@ public:
 	Ref storeObject(const Record &) const;
 	Ref storeObject(const Blob &) const;
 
+	std::variant<Ref, std::vector<Digest>> copy(const PartialRef &) const;
+	std::variant<Ref, std::vector<Digest>> copy(const PartialObject &) const;
+	Ref copy(const Ref &) const;
+	Ref copy(const Object &) const;
+
 	template<typename T> Stored<T> store(const T &) const;
 
 	void storeKey(Ref pubref, const std::vector<uint8_t> &) const;
@@ -89,7 +94,7 @@ public:
 	static constexpr size_t size = 32;
 
 	Digest(const Digest &) = default;
-	Digest & operator=(const Digest &) = delete;
+	Digest & operator=(const Digest &) = default;
 
 	explicit Digest(std::array<uint8_t, size> value): value(value) {}
 	explicit Digest(const std::string &);

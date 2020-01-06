@@ -347,9 +347,40 @@ optional<Object> Storage::loadObject(const Digest & digest) const
 }
 
 Ref Storage::storeObject(const Object & object) const
+{ return copy(object); }
+
+Ref Storage::storeObject(const Record & val) const
+{ return storeObject(Object(val)); }
+
+Ref Storage::storeObject(const Blob & val) const
+{ return storeObject(Object(val)); }
+
+template<class S>
+optional<Digest> Storage::Priv::copy(const typename S::Ref & pref, vector<Digest> * missing) const
 {
-	// TODO: ensure storage transitively
-	auto content = object.encode();
+	if (backend->contains(pref.digest()))
+		return pref.digest();
+	if (pref)
+		return copy<S>(*pref, missing);
+	if (missing)
+		missing->push_back(pref.digest());
+	return nullopt;
+}
+
+template<class S>
+optional<Digest> Storage::Priv::copy(const ObjectT<S> & pobj, vector<Digest> * missing) const
+{
+	bool fail = false;
+	if (auto rec = pobj.asRecord())
+		for (const auto & item : rec->items())
+			if (auto r = item.asRef())
+				if (!copy<S>(*r, missing))
+					fail = true;
+
+	if (fail)
+		return nullopt;
+
+	auto content = pobj.encode();
 
 	array<uint8_t, Digest::size> arr;
 	int ret = blake2b(arr.data(), content.data(), nullptr,
@@ -358,15 +389,39 @@ Ref Storage::storeObject(const Object & object) const
 		throw runtime_error("failed to compute digest");
 
 	Digest digest(arr);
-	p->backend->storeBytes(digest, content);
-	return Ref::create(*this, digest).value();
+	backend->storeBytes(digest, content);
+	return digest;
 }
 
-Ref Storage::storeObject(const Record & val) const
-{ return storeObject(Object(val)); }
+variant<Ref, vector<Digest>> Storage::copy(const PartialRef & pref) const
+{
+	vector<Digest> missing;
+	if (auto digest = p->copy<PartialStorage>(pref, &missing))
+		return Ref::create(*this, *digest).value();
+	return missing;
+}
 
-Ref Storage::storeObject(const Blob & val) const
-{ return storeObject(Object(val)); }
+variant<Ref, vector<Digest>> Storage::copy(const PartialObject & pobj) const
+{
+	vector<Digest> missing;
+	if (auto digest = p->copy<PartialStorage>(pobj, &missing))
+		return Ref::create(*this, *digest).value();
+	return missing;
+}
+
+Ref Storage::copy(const Ref & ref) const
+{
+	if (auto digest = p->copy<Storage>(ref, nullptr))
+		return Ref::create(*this, *digest).value();
+	throw runtime_error("corrupted storage");
+}
+
+Ref Storage::copy(const Object & obj) const
+{
+	if (auto digest = p->copy<Storage>(obj, nullptr))
+		return Ref::create(*this, *digest).value();
+	throw runtime_error("corrupted storage");
+}
 
 void Storage::storeKey(Ref pubref, const vector<uint8_t> & key) const
 {

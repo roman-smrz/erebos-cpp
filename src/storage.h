@@ -103,6 +103,11 @@ struct Storage::Priv
 	shared_ptr<StorageBackend> backend;
 
 	optional<vector<uint8_t>> loadBytes(const Digest & digest) const;
+
+	template<class S>
+	optional<Digest> copy(const typename S::Ref &, vector<Digest> *) const;
+	template<class S>
+	optional<Digest> copy(const ObjectT<S> &, vector<Digest> *) const;
 };
 
 struct Ref::Priv
