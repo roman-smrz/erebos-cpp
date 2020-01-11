@@ -102,6 +102,7 @@ struct Storage::Priv
 {
 	shared_ptr<StorageBackend> backend;
 
+	Digest storeBytes(const vector<uint8_t> &) const;
 	optional<vector<uint8_t>> loadBytes(const Digest & digest) const;
 
 	template<class S>

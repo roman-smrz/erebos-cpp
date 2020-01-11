@@ -10,13 +10,16 @@
 #include <netinet/in.h>
 
 using std::condition_variable;
+using std::monostate;
 using std::mutex;
 using std::optional;
+using std::shared_ptr;
 using std::string;
 using std::thread;
 using std::unique_ptr;
 using std::variant;
 using std::vector;
+using std::weak_ptr;
 
 namespace chrono = std::chrono;
 using chrono::steady_clock;
@@ -25,13 +28,21 @@ namespace erebos {
 
 struct Peer
 {
+	Peer(const Peer &) = delete;
+	Peer & operator=(const Peer &) = delete;
+
 	const int sock;
 	const sockaddr_in addr;
+
+	variant<monostate,
+		shared_ptr<struct WaitingRef>,
+		Identity> identity;
 
 	Storage tempStorage;
 	PartialStorage partStorage;
 
-	void send(const struct TransportHeader &, const vector<Object> &);
+	void send(const struct TransportHeader &, const vector<Object> &) const;
+	void updateIdentity();
 };
 
 struct TransportHeader
@@ -61,6 +72,16 @@ struct TransportHeader
 	const vector<Item> items;
 };
 
+struct WaitingRef
+{
+	const Storage storage;
+	const PartialRef ref;
+	const Peer & peer;
+	vector<Digest> missing;
+
+	optional<Ref> check(vector<TransportHeader::Item> * request = nullptr);
+};
+
 struct Server::Priv
 {
 	Priv(const Identity & self);
@@ -84,6 +105,7 @@ struct Server::Priv
 
 	vector<unique_ptr<Peer>> peers;
 	vector<struct TransportHeader> outgoing;
+	vector<weak_ptr<WaitingRef>> waiting;
 
 	int sock;
 	vector<in_addr> bcastAddresses;

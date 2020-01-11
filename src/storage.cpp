@@ -316,6 +316,19 @@ optional<Ref> Storage::ref(const Digest & digest) const
 	return Ref::create(*this, digest);
 }
 
+Digest PartialStorage::Priv::storeBytes(const vector<uint8_t> & content) const
+{
+	array<uint8_t, Digest::size> arr;
+	int ret = blake2b(arr.data(), content.data(), nullptr,
+			Digest::size, content.size(), 0);
+	if (ret != 0)
+		throw runtime_error("failed to compute digest");
+
+	Digest digest(arr);
+	backend->storeBytes(digest, content);
+	return digest;
+}
+
 optional<vector<uint8_t>> PartialStorage::Priv::loadBytes(const Digest & digest) const
 {
 	auto ocontent = backend->loadBytes(digest);
@@ -338,6 +351,15 @@ optional<PartialObject> PartialStorage::loadObject(const Digest & digest) const
 		return PartialObject::decode(*this, *content);
 	return nullopt;
 }
+
+PartialRef PartialStorage::storeObject(const PartialObject & obj) const
+{ return ref(p->storeBytes(obj.encode())); }
+
+PartialRef PartialStorage::storeObject(const PartialRecord & val) const
+{ return storeObject(PartialObject(val)); }
+
+PartialRef PartialStorage::storeObject(const Blob & val) const
+{ return storeObject(PartialObject(val)); }
 
 optional<Object> Storage::loadObject(const Digest & digest) const
 {
@@ -380,17 +402,7 @@ optional<Digest> Storage::Priv::copy(const ObjectT<S> & pobj, vector<Digest> * m
 	if (fail)
 		return nullopt;
 
-	auto content = pobj.encode();
-
-	array<uint8_t, Digest::size> arr;
-	int ret = blake2b(arr.data(), content.data(), nullptr,
-			Digest::size, content.size(), 0);
-	if (ret != 0)
-		throw runtime_error("failed to compute digest");
-
-	Digest digest(arr);
-	backend->storeBytes(digest, content);
-	return digest;
+	return storeBytes(pobj.encode());
 }
 
 variant<Ref, vector<Digest>> Storage::copy(const PartialRef & pref) const
