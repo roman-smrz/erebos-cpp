@@ -160,12 +160,19 @@ class RecordT
 public:
 	class Item {
 	public:
+		struct UnknownType
+		{
+			std::string type;
+			std::string value;
+		};
+
 		typedef std::variant<
 			std::monostate,
 			int,
 			std::string,
 			std::vector<uint8_t>,
-			typename S::Ref> Variant;
+			typename S::Ref,
+			UnknownType> Variant;
 
 		Item(const std::string & name):
 			Item(name, std::monostate()) {}
@@ -184,6 +191,7 @@ public:
 		std::optional<std::string> asText() const;
 		std::optional<std::vector<uint8_t>> asBinary() const;
 		std::optional<typename S::Ref> asRef() const;
+		std::optional<UnknownType> asUnknown() const;
 
 		template<typename T> std::optional<Stored<T>> as() const;
 

@@ -574,6 +574,14 @@ optional<typename S::Ref> RecordT<S>::Item::asRef() const
 	return nullopt;
 }
 
+template<class S>
+optional<typename RecordT<S>::Item::UnknownType> RecordT<S>::Item::asUnknown() const
+{
+	if (holds_alternative<typename Item::UnknownType>(value))
+		return std::get<typename Item::UnknownType>(value);
+	return nullopt;
+}
+
 
 template<class S>
 RecordT<S>::RecordT(const vector<Item> & from):
@@ -625,7 +633,8 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 				items->emplace_back(name, st.ref(Digest(value)));
 			}
 		} else
-			throw runtime_error("unknown record item type");
+			items->emplace_back(name,
+					typename Item::UnknownType { type, value });
 
 		begin = newline + 1;
 	}
@@ -696,6 +705,9 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 		} else if (auto x = item.asRef()) {
 			type = "r.b2";
 			value = string(x->digest());
+		} else if (auto x = item.asUnknown()) {
+			type = x->type;
+			value = x->value;
 		} else {
 			throw runtime_error("unhandeled record item type");
 		}
