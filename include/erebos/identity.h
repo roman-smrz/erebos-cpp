@@ -12,6 +12,9 @@ public:
 
 	std::optional<std::string> name() const;
 	std::optional<Identity> owner() const;
+
+	Stored<class PublicKey> keyMessage() const;
+
 	std::optional<Ref> ref() const;
 
 	class Builder

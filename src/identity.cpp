@@ -43,6 +43,11 @@ optional<Identity> Identity::owner() const
 	return p->owner;
 }
 
+Stored<PublicKey> Identity::keyMessage() const
+{
+	return p->keyMessage;
+}
+
 optional<Ref> Identity::ref() const
 {
 	if (p->data.size() == 1)
@@ -167,14 +172,20 @@ shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<Stored<Signed<I
 		if (!verifySignatures(d))
 			return nullptr;
 
+	auto keyMessageItem = lookupProperty(sdata, []
+			(const IdentityData & d) { return d.keyMessage.has_value(); });
+	if (!keyMessageItem)
+		return nullptr;
+
 	auto p = new Priv {
 		.data = sdata,
 		.name = {},
 		.owner = nullopt,
+		.keyMessage = keyMessageItem.value()->keyMessage.value(),
 	};
 	shared_ptr<Priv> ret(p);
 
-	auto ownerProp = p->lookupProperty([]
+	auto ownerProp = lookupProperty(sdata, []
 			(const IdentityData & d) { return d.owner.has_value(); });
 	if (ownerProp) {
 		auto owner = validate({ *ownerProp.value()->owner });
@@ -184,7 +195,7 @@ shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<Stored<Signed<I
 	}
 
 	p->name = async(std::launch::deferred, [p] () -> optional<string> {
-		if (auto d = p->lookupProperty([] (const IdentityData & d) { return d.name.has_value(); }))
+		if (auto d = lookupProperty(p->data, [] (const IdentityData & d) { return d.name.has_value(); }))
 			return d.value()->name;
 		return nullopt;
 	});
@@ -193,7 +204,8 @@ shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<Stored<Signed<I
 }
 
 optional<Stored<IdentityData>> Identity::Priv::lookupProperty(
-		function<bool(const IdentityData &)> sel) const
+			const vector<Stored<Signed<IdentityData>>> & data,
+		function<bool(const IdentityData &)> sel)
 {
 	set<Stored<Signed<IdentityData>>> current, prop_heads;
 

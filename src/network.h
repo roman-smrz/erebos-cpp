@@ -2,6 +2,8 @@
 
 #include <erebos/network.h>
 
+#include "channel.h"
+
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -26,23 +28,30 @@ using chrono::steady_clock;
 
 namespace erebos {
 
-struct Peer
+struct Server::Peer
 {
 	Peer(const Peer &) = delete;
 	Peer & operator=(const Peer &) = delete;
 
-	const int sock;
+	Priv & server;
 	const sockaddr_in addr;
 
 	variant<monostate,
 		shared_ptr<struct WaitingRef>,
 		Identity> identity;
 
+	variant<monostate,
+		Stored<ChannelRequest>,
+		shared_ptr<struct WaitingRef>,
+		Stored<ChannelAccept>,
+		Stored<Channel>> channel;
+
 	Storage tempStorage;
 	PartialStorage partStorage;
 
 	void send(const struct TransportHeader &, const vector<Object> &) const;
-	void updateIdentity();
+	void updateIdentity(struct ReplyBuilder &);
+	void updateChannel(struct ReplyBuilder &);
 };
 
 struct TransportHeader
@@ -76,10 +85,16 @@ struct WaitingRef
 {
 	const Storage storage;
 	const PartialRef ref;
-	const Peer & peer;
+	const Server::Peer & peer;
 	vector<Digest> missing;
 
 	optional<Ref> check(vector<TransportHeader::Item> * request = nullptr);
+};
+
+struct ReplyBuilder
+{
+	vector<TransportHeader::Item> header;
+	vector<Object> body;
 };
 
 struct Server::Priv
@@ -90,7 +105,7 @@ struct Server::Priv
 	void doAnnounce();
 
 	Peer & getPeer(const sockaddr_in & paddr);
-	void handlePacket(Peer &, const TransportHeader &);
+	void handlePacket(Peer &, const TransportHeader &, ReplyBuilder &);
 
 	constexpr static uint16_t discoveryPort { 29665 };
 	constexpr static chrono::seconds announceInterval { 60 };

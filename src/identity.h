@@ -29,11 +29,13 @@ public:
 	vector<Stored<Signed<IdentityData>>> data;
 	shared_future<optional<string>> name;
 	optional<Identity> owner;
+	Stored<PublicKey> keyMessage;
 
 	static bool verifySignatures(const Stored<Signed<IdentityData>> & sdata);
 	static shared_ptr<Priv> validate(const vector<Stored<Signed<IdentityData>>> & sdata);
-	optional<Stored<IdentityData>> lookupProperty(
-			function<bool(const IdentityData &)> sel) const;
+	static optional<Stored<IdentityData>> lookupProperty(
+			const vector<Stored<Signed<IdentityData>>> & data,
+			function<bool(const IdentityData &)> sel);
 };
 
 class Identity::Builder::Priv

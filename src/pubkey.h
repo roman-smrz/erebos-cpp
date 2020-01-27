@@ -133,4 +133,35 @@ bool Signed<T>::isSignedBy(const Stored<PublicKey> & key) const
 	return false;
 }
 
+
+class PublicKexKey
+{
+	PublicKexKey(EVP_PKEY * key):
+		key(key, EVP_PKEY_free) {}
+	friend class SecretKexKey;
+public:
+	static optional<PublicKexKey> load(const Ref &);
+	Ref store(const Storage &) const;
+
+	const shared_ptr<EVP_PKEY> key;
+};
+
+class SecretKexKey
+{
+	SecretKexKey(EVP_PKEY * key, const Stored<PublicKexKey> & pub):
+		key(key, EVP_PKEY_free), pub_(pub) {}
+	SecretKexKey(shared_ptr<EVP_PKEY> && key, const Stored<PublicKexKey> & pub):
+		key(key), pub_(pub) {}
+public:
+	static SecretKexKey generate(const Storage & st);
+	static optional<SecretKexKey> load(const Stored<PublicKexKey> & st);
+
+	Stored<PublicKexKey> pub() const { return pub_; }
+	vector<uint8_t> dh(const PublicKexKey &) const;
+
+private:
+	const shared_ptr<EVP_PKEY> key;
+	Stored<PublicKexKey> pub_;
+};
+
 }

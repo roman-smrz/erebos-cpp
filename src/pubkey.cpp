@@ -152,3 +152,107 @@ bool Signature::verify(const Ref & ref) const
 	return EVP_DigestVerify(mdctx.get(), sig.data(), sig.size(),
 			ref.digest().arr().data(), Digest::size) == 1;
 }
+
+
+optional<PublicKexKey> PublicKexKey::load(const Ref & ref)
+{
+	auto rec = ref->asRecord();
+	if (!rec)
+		return nullopt;
+
+	if (auto ktype = rec->item("type").asText())
+		if (ktype.value() != "x25519")
+			throw runtime_error("unsupported key type " + ktype.value());
+
+	if (auto pubkey = rec->item("pubkey").asBinary())
+		return PublicKexKey(EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr,
+					pubkey.value().data(), pubkey.value().size()));
+
+	return nullopt;
+}
+
+Ref PublicKexKey::store(const Storage & st) const
+{
+	vector<Record::Item> items;
+
+	items.emplace_back("type", "x25519");
+
+	vector<uint8_t> keyData;
+	size_t keyLen;
+	EVP_PKEY_get_raw_public_key(key.get(), nullptr, &keyLen);
+	keyData.resize(keyLen);
+	EVP_PKEY_get_raw_public_key(key.get(), keyData.data(), &keyLen);
+	items.emplace_back("pubkey", keyData);
+
+	return st.storeObject(Record(std::move(items)));
+}
+
+SecretKexKey SecretKexKey::generate(const Storage & st)
+{
+	unique_ptr<EVP_PKEY_CTX, void(*)(EVP_PKEY_CTX*)>
+		pctx(EVP_PKEY_CTX_new_id(EVP_PKEY_X25519, NULL), &EVP_PKEY_CTX_free);
+	if (!pctx)
+		throw runtime_error("failed to generate key");
+
+	if (EVP_PKEY_keygen_init(pctx.get()) != 1)
+		throw runtime_error("failed to generate key");
+
+	EVP_PKEY *pkey = NULL;
+	if (EVP_PKEY_keygen(pctx.get(), &pkey) != 1)
+		throw runtime_error("failed to generate key");
+	shared_ptr<EVP_PKEY> seckey(pkey, EVP_PKEY_free);
+
+	vector<uint8_t> keyData;
+	size_t keyLen;
+
+	EVP_PKEY_get_raw_public_key(seckey.get(), nullptr, &keyLen);
+	keyData.resize(keyLen);
+	EVP_PKEY_get_raw_public_key(seckey.get(), keyData.data(), &keyLen);
+	auto pubkey = st.store(PublicKexKey(EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr,
+					keyData.data(), keyData.size())));
+
+	EVP_PKEY_get_raw_private_key(seckey.get(), nullptr, &keyLen);
+	keyData.resize(keyLen);
+	EVP_PKEY_get_raw_private_key(seckey.get(), keyData.data(), &keyLen);
+	st.storeKey(pubkey.ref, keyData);
+
+	return SecretKexKey(std::move(seckey), pubkey);
+}
+
+optional<SecretKexKey> SecretKexKey::load(const Stored<PublicKexKey> & pub)
+{
+	auto keyData = pub.ref.storage().loadKey(pub.ref);
+	if (!keyData)
+		return nullopt;
+
+	EVP_PKEY * key = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, nullptr,
+				keyData->data(), keyData->size());
+	if (!key)
+		throw runtime_error("falied to parse secret key");
+	return SecretKexKey(key, pub);
+}
+
+vector<uint8_t> SecretKexKey::dh(const PublicKexKey & pubkey) const
+{
+	unique_ptr<EVP_PKEY_CTX, void(*)(EVP_PKEY_CTX*)>
+		pctx(EVP_PKEY_CTX_new(key.get(), nullptr), &EVP_PKEY_CTX_free);
+	if (!pctx)
+		throw runtime_error("failed to derive shared secret");
+
+	if (EVP_PKEY_derive_init(pctx.get()) <= 0)
+		throw runtime_error("failed to derive shared secret");
+
+	if (EVP_PKEY_derive_set_peer(pctx.get(), pubkey.key.get()) <= 0)
+		throw runtime_error("failed to derive shared secret");
+
+	size_t dhlen;
+	if (EVP_PKEY_derive(pctx.get(), NULL, &dhlen) <= 0)
+		throw runtime_error("failed to derive shared secret");
+
+	vector<uint8_t> dhsecret(dhlen);
+
+	if (EVP_PKEY_derive(pctx.get(), dhsecret.data(), &dhlen) <= 0)
+		throw runtime_error("failed to derive shared secret");
+
+	return dhsecret;
+}
