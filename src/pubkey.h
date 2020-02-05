@@ -106,10 +106,7 @@ optional<Signed<T>> Signed<T>::load(const Ref & ref)
 			if (sig.value()->verify(data.value().ref))
 				sigs.push_back(sig.value());
 
-	return Signed {
-		.data = data.value(),
-		.sigs = sigs,
-	};
+	return Signed(*data, sigs);
 }
 
 template<typename T>

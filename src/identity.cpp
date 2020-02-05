@@ -11,6 +11,9 @@ using std::nullopt;
 using std::runtime_error;
 using std::set;
 
+Identity::Identity(const Priv * p): p(p) {}
+Identity::Identity(shared_ptr<const Priv> && p): p(std::move(p)) {}
+
 optional<Identity> Identity::load(const Ref & ref)
 {
 	return Identity::load(vector { ref });
@@ -74,6 +77,8 @@ Identity::Builder Identity::modify() const
 	});
 }
 
+
+Identity::Builder::Builder(Priv * p): p(p) {}
 
 Identity Identity::Builder::commit() const
 {

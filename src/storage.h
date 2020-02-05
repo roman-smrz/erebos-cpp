@@ -98,7 +98,7 @@ private:
 	unique_ptr<ChainStorage> parent;
 };
 
-struct Storage::Priv
+struct PartialStorage::Priv
 {
 	shared_ptr<StorageBackend> backend;
 
@@ -111,7 +111,7 @@ struct Storage::Priv
 	optional<Digest> copy(const ObjectT<S> &, vector<Digest> *) const;
 };
 
-struct Ref::Priv
+struct PartialRef::Priv
 {
 	const unique_ptr<PartialStorage> storage;
 	const Digest digest;

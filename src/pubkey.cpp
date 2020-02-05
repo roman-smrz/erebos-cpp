@@ -122,10 +122,7 @@ optional<Signature> Signature::load(const Ref & ref)
 	if (!key || !sig)
 		return nullopt;
 
-	return Signature {
-		.key = key.value(),
-		.sig = sig.value(),
-	};
+	return Signature(*key, *sig);
 }
 
 Ref Signature::store(const Storage & st) const

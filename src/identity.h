@@ -23,9 +23,8 @@ public:
 	const optional<Stored<PublicKey>> keyMessage;
 };
 
-class Identity::Priv
+struct Identity::Priv
 {
-public:
 	vector<Stored<Signed<IdentityData>>> data;
 	shared_future<optional<string>> name;
 	optional<Identity> owner;
@@ -38,9 +37,8 @@ public:
 			function<bool(const IdentityData &)> sel);
 };
 
-class Identity::Builder::Priv
+struct Identity::Builder::Priv
 {
-public:
 	Storage storage;
 	vector<Stored<Signed<IdentityData>>> prev = {};
 	optional<string> name = nullopt;

@@ -33,7 +33,7 @@ public:
 	typedef erebos::PartialRef Ref;
 
 	PartialStorage(const PartialStorage &) = default;
-	PartialStorage & operator=(const PartialStorage &) = default;
+	PartialStorage & operator=(const PartialStorage &) = delete;
 	virtual ~PartialStorage() = default;
 
 	bool operator==(const PartialStorage &) const;
@@ -62,7 +62,7 @@ public:
 
 	Storage(const std::filesystem::path &);
 	Storage(const Storage &) = default;
-	Storage & operator=(const Storage &) = default;
+	Storage & operator=(const Storage &) = delete;
 
 	Storage deriveEphemeralStorage() const;
 	PartialStorage derivePartialStorage() const;
@@ -117,7 +117,7 @@ class PartialRef
 {
 public:
 	PartialRef(const PartialRef &) = default;
-	PartialRef & operator=(const PartialRef &) = default;
+	PartialRef & operator=(const PartialRef &) = delete;
 
 	static PartialRef create(PartialStorage, const Digest &);
 
@@ -140,7 +140,7 @@ class Ref : public PartialRef
 {
 public:
 	Ref(const Ref &) = default;
-	Ref & operator=(const Ref &) = default;
+	Ref & operator=(const Ref &) = delete;
 
 	static std::optional<Ref> create(Storage, const Digest &);
 

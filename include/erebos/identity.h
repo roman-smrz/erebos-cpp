@@ -29,7 +29,7 @@ public:
 		friend class Identity;
 		struct Priv;
 		const std::shared_ptr<Priv> p;
-		Builder(Priv * p): p(p) {}
+		Builder(Priv * p);
 	};
 
 	static Builder create(const Storage &);
@@ -38,8 +38,8 @@ public:
 private:
 	struct Priv;
 	const std::shared_ptr<const Priv> p;
-	Identity(const Priv * p): p(p) {}
-	Identity(std::shared_ptr<const Priv> && p): p(std::move(p)) {}
+	Identity(const Priv * p);
+	Identity(std::shared_ptr<const Priv> && p);
 };
 
 }

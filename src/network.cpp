@@ -458,7 +458,7 @@ optional<TransportHeader> TransportHeader::load(const PartialObject & obj)
 		}
 	}
 
-	return TransportHeader { .items = items };
+	return TransportHeader(items);
 }
 
 PartialObject TransportHeader::toObject() const

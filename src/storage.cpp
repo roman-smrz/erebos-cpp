@@ -720,8 +720,8 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 	return res;
 }
 
-template class RecordT<Storage>;
-template class RecordT<PartialStorage>;
+template class erebos::RecordT<Storage>;
+template class erebos::RecordT<PartialStorage>;
 
 
 Blob::Blob(const vector<uint8_t> & vec):
@@ -852,8 +852,8 @@ optional<Blob> ObjectT<S>::asBlob() const
 	return nullopt;
 }
 
-template class ObjectT<Storage>;
-template class ObjectT<PartialStorage>;
+template class erebos::ObjectT<Storage>;
+template class erebos::ObjectT<PartialStorage>;
 
 vector<Stored<Object>> erebos::collectStoredObjects(const Stored<Object> & from)
 {
