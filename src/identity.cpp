@@ -46,6 +46,13 @@ optional<Identity> Identity::owner() const
 	return p->owner;
 }
 
+const Identity & Identity::finalOwner() const
+{
+	if (p->owner)
+		return p->owner->finalOwner();
+	return *this;
+}
+
 Stored<PublicKey> Identity::keyMessage() const
 {
 	return p->keyMessage;

@@ -6,12 +6,14 @@
 #include <cstring>
 #include <iostream>
 
+#include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <unistd.h>
 
 using std::holds_alternative;
 using std::scoped_lock;
+using std::to_string;
 using std::unique_lock;
 
 using namespace erebos;
@@ -22,6 +24,87 @@ Server::Server(const Identity & self):
 }
 
 Server::~Server() = default;
+
+PeerList & Server::peerList() const
+{
+	return p->plist;
+}
+
+
+Peer::Peer(const shared_ptr<Priv> & p): p(p) {}
+Peer::~Peer() = default;
+
+string Peer::name() const
+{
+	if (auto speer = p->speer.lock()) {
+		if (holds_alternative<Identity>(speer->identity))
+			if (auto name = std::get<Identity>(speer->identity).finalOwner().name())
+				return *name;
+		if (holds_alternative<shared_ptr<WaitingRef>>(speer->identity))
+			return string(std::get<shared_ptr<WaitingRef>>(speer->identity)->ref.digest());
+
+		char buf[16];
+		if (inet_ntop(AF_INET, &speer->addr.sin_addr, buf, sizeof(buf)))
+			return string(buf) + ":" + to_string(ntohs(speer->addr.sin_port));
+		return "<invalid address>";
+	}
+	return "<server closed>";
+}
+
+optional<Identity> Peer::identity() const
+{
+	if (auto speer = p->speer.lock())
+		if (holds_alternative<Identity>(speer->identity))
+			return std::get<Identity>(speer->identity);
+	return nullopt;
+}
+
+void Peer::Priv::notifyWatchers()
+{
+	if (auto slist = list.lock()) {
+		Peer p(shared_from_this());
+		for (const auto & w : slist->watchers)
+			w(listIndex, &p);
+	}
+}
+
+
+PeerList::PeerList(): p(new Priv) {}
+PeerList::PeerList(const shared_ptr<PeerList::Priv> & p): p(p) {}
+PeerList::~PeerList() = default;
+
+void PeerList::Priv::push(const shared_ptr<Server::Peer> & speer)
+{
+	scoped_lock lock(dataMutex);
+	size_t s = peers.size();
+
+	speer->lpeer.reset(new Peer::Priv);
+	speer->lpeer->speer = speer;
+	speer->lpeer->list = shared_from_this();
+	speer->lpeer->listIndex = s;
+
+	Peer p(speer->lpeer);
+
+	peers.push_back(speer->lpeer);
+	for (const auto & w : watchers)
+		w(s, &p);
+}
+
+size_t PeerList::size() const
+{
+	return p->peers.size();
+}
+
+Peer PeerList::at(size_t i) const
+{
+	return Peer(p->peers.at(i));
+}
+
+void PeerList::onUpdate(function<void(size_t, const Peer *)> w)
+{
+	p->watchers.push_back(w);
+}
+
 
 Server::Priv::Priv(const Identity & self):
 	self(self)
@@ -174,15 +257,16 @@ Server::Peer & Server::Priv::getPeer(const sockaddr_in & paddr)
 			return *peer;
 
 	auto st = self.ref()->storage().deriveEphemeralStorage();
-	Peer * peer = new Peer {
+	shared_ptr<Peer> peer(new Peer {
 		.server = *this,
 		.addr = paddr,
 		.identity = monostate(),
 		.channel = monostate(),
 		.tempStorage = st,
 		.partStorage = st.derivePartialStorage(),
-		};
-	peers.emplace_back(peer);
+		});
+	peers.push_back(peer);
+	plist.p->push(peer);
 	return *peer;
 }
 
@@ -328,8 +412,11 @@ void Server::Peer::updateIdentity(ReplyBuilder & reply)
 {
 	if (holds_alternative<shared_ptr<WaitingRef>>(identity))
 		if (auto ref = std::get<shared_ptr<WaitingRef>>(identity)->check(&reply.header))
-			if (auto id = Identity::load(*ref))
+			if (auto id = Identity::load(*ref)) {
 				identity.emplace<Identity>(*id);
+				if (lpeer)
+					lpeer->notifyWatchers();
+			}
 }
 
 void Server::Peer::updateChannel(ReplyBuilder & reply)

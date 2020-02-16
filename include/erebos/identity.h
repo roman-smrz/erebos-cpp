@@ -12,6 +12,7 @@ public:
 
 	std::optional<std::string> name() const;
 	std::optional<Identity> owner() const;
+	const Identity & finalOwner() const;
 
 	Stored<class PublicKey> keyMessage() const;
 

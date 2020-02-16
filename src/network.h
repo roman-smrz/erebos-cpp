@@ -23,6 +23,8 @@ using std::variant;
 using std::vector;
 using std::weak_ptr;
 
+using std::enable_shared_from_this;
+
 namespace chrono = std::chrono;
 using chrono::steady_clock;
 
@@ -49,9 +51,29 @@ struct Server::Peer
 	Storage tempStorage;
 	PartialStorage partStorage;
 
+	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
+
 	void send(const struct TransportHeader &, const vector<Object> &) const;
 	void updateIdentity(struct ReplyBuilder &);
 	void updateChannel(struct ReplyBuilder &);
+};
+
+struct Peer::Priv : enable_shared_from_this<Peer::Priv>
+{
+	weak_ptr<Server::Peer> speer;
+	weak_ptr<PeerList::Priv> list;
+	size_t listIndex;
+
+	void notifyWatchers();
+};
+
+struct PeerList::Priv : enable_shared_from_this<PeerList::Priv>
+{
+	mutex dataMutex;
+	vector<shared_ptr<Peer::Priv>> peers;
+	vector<function<void(size_t, const Peer *)>> watchers;
+
+	void push(const shared_ptr<Server::Peer> &);
 };
 
 struct TransportHeader
@@ -118,7 +140,9 @@ struct Server::Priv
 	thread threadListen;
 	thread threadAnnounce;
 
-	vector<unique_ptr<Peer>> peers;
+	vector<shared_ptr<Peer>> peers;
+	PeerList plist;
+
 	vector<struct TransportHeader> outgoing;
 	vector<weak_ptr<WaitingRef>> waiting;
 
