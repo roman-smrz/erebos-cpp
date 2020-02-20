@@ -536,6 +536,30 @@ const Storage & Ref::storage() const
 }
 
 
+UUID::UUID(string str)
+{
+	if (uuid_parse(str.c_str(), uuid) != 0)
+		throw runtime_error("invalid UUID");
+}
+
+UUID::operator string() const
+{
+	string str(UUID_STR_LEN - 1, '\0');
+	uuid_unparse_lower(uuid, str.data());
+	return str;
+}
+
+bool UUID::operator==(const UUID & other) const
+{
+	return std::equal(std::begin(uuid), std::end(uuid), std::begin(other.uuid));
+}
+
+bool UUID::operator!=(const UUID & other) const
+{
+	return !(*this == other);
+}
+
+
 template<class S>
 RecordT<S>::Item::operator bool() const
 {
@@ -563,6 +587,14 @@ optional<vector<uint8_t>> RecordT<S>::Item::asBinary() const
 {
 	if (holds_alternative<vector<uint8_t>>(value))
 		return std::get<vector<uint8_t>>(value);
+	return nullopt;
+}
+
+template<class S>
+optional<UUID> RecordT<S>::Item::asUUID() const
+{
+	if (holds_alternative<UUID>(value))
+		return std::get<UUID>(value);
 	return nullopt;
 }
 
@@ -623,6 +655,8 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 			items->emplace_back(name, value);
 		else if (type == "b")
 			items->emplace_back(name, base64::decode(value));
+		else if (type == "u")
+			items->emplace_back(name, UUID(value));
 		else if (type == "r.b2") {
 			if constexpr (is_same_v<S, Storage>) {
 				if (auto ref = st.ref(Digest(value)))
@@ -702,6 +736,9 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 		} else if (auto x = item.asBinary()) {
 			type = "b";
 			value = base64::encode(*x);
+		} else if (auto x = item.asUUID()) {
+			type = "u";
+			value = string(*x);
 		} else if (auto x = item.asRef()) {
 			type = "r.b2";
 			value = string(x->digest());

@@ -10,5 +10,6 @@ find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_library(B2_LIBRARY b2 REQUIRED)
+find_library(UUID_LIBRARY uuid REQUIRED)
 
 add_subdirectory(src)

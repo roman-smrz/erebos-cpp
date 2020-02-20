@@ -9,6 +9,8 @@
 #include <variant>
 #include <vector>
 
+#include <uuid/uuid.h>
+
 namespace erebos {
 
 class Storage;
@@ -154,6 +156,17 @@ protected:
 	Ref(const std::shared_ptr<const Priv> p): PartialRef(p) {}
 };
 
+struct UUID
+{
+	explicit UUID(std::string);
+	explicit operator std::string() const;
+
+	bool operator==(const UUID &) const;
+	bool operator!=(const UUID &) const;
+
+	uuid_t uuid;
+};
+
 template<class S>
 class RecordT
 {
@@ -171,6 +184,7 @@ public:
 			int,
 			std::string,
 			std::vector<uint8_t>,
+			UUID,
 			typename S::Ref,
 			UnknownType> Variant;
 
@@ -190,6 +204,7 @@ public:
 		std::optional<int> asInteger() const;
 		std::optional<std::string> asText() const;
 		std::optional<std::vector<uint8_t>> asBinary() const;
+		std::optional<UUID> asUUID() const;
 		std::optional<typename S::Ref> asRef() const;
 		std::optional<UnknownType> asUnknown() const;
 
