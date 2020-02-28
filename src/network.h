@@ -30,6 +30,8 @@ using chrono::steady_clock;
 
 namespace erebos {
 
+class ReplyBuilder;
+
 struct Server::Peer
 {
 	Peer(const Peer &) = delete;
@@ -54,8 +56,8 @@ struct Server::Peer
 	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
 
 	void send(const struct TransportHeader &, const vector<Object> &) const;
-	void updateIdentity(struct ReplyBuilder &);
-	void updateChannel(struct ReplyBuilder &);
+	void updateIdentity(ReplyBuilder &);
+	void updateChannel(ReplyBuilder &);
 };
 
 struct Peer::Priv : enable_shared_from_this<Peer::Priv>
@@ -103,6 +105,20 @@ struct TransportHeader
 	const vector<Item> items;
 };
 
+class ReplyBuilder
+{
+public:
+	void header(TransportHeader::Item &&);
+	void body(const Ref &);
+
+	const vector<TransportHeader::Item> & header() const { return mheader; }
+	vector<Object> body() const;
+
+private:
+	vector<TransportHeader::Item> mheader;
+	vector<Ref> mbody;
+};
+
 struct WaitingRef
 {
 	const Storage storage;
@@ -110,13 +126,7 @@ struct WaitingRef
 	const Server::Peer & peer;
 	vector<Digest> missing;
 
-	optional<Ref> check(vector<TransportHeader::Item> * request = nullptr);
-};
-
-struct ReplyBuilder
-{
-	vector<TransportHeader::Item> header;
-	vector<Object> body;
+	optional<Ref> check(ReplyBuilder &);
 };
 
 struct Server::Priv
