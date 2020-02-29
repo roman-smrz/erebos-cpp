@@ -1,6 +1,7 @@
 #pragma once
 
 #include <erebos/identity.h>
+#include <erebos/service.h>
 
 #include <functional>
 
@@ -9,7 +10,7 @@ namespace erebos {
 class Server
 {
 public:
-	Server(const Identity &);
+	Server(const Identity &, std::vector<std::unique_ptr<Service>> &&);
 	~Server();
 
 	class PeerList & peerList() const;
@@ -29,6 +30,9 @@ public:
 
 	std::string name() const;
 	std::optional<Identity> identity() const;
+
+	bool hasChannel() const;
+	bool send(UUID, const Ref &) const;
 
 private:
 	std::shared_ptr<Priv> p;

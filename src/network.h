@@ -21,6 +21,7 @@ using std::thread;
 using std::unique_ptr;
 using std::variant;
 using std::vector;
+using std::tuple;
 using std::weak_ptr;
 
 using std::enable_shared_from_this;
@@ -31,6 +32,7 @@ using chrono::steady_clock;
 namespace erebos {
 
 class ReplyBuilder;
+struct WaitingRef;
 
 struct Server::Peer
 {
@@ -53,11 +55,14 @@ struct Server::Peer
 	Storage tempStorage;
 	PartialStorage partStorage;
 
+	vector<tuple<UUID, shared_ptr<WaitingRef>>> serviceQueue {};
+
 	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
 
 	void send(const struct TransportHeader &, const vector<Object> &) const;
 	void updateIdentity(ReplyBuilder &);
 	void updateChannel(ReplyBuilder &);
+	void updateService(ReplyBuilder &);
 };
 
 struct Peer::Priv : enable_shared_from_this<Peer::Priv>
@@ -94,7 +99,7 @@ struct TransportHeader
 
 	struct Item {
 		const Type type;
-		const variant<PartialRef, string> value;
+		const variant<PartialRef, UUID> value;
 	};
 
 	TransportHeader(const vector<Item> & items): items(items) {}
@@ -131,7 +136,7 @@ struct WaitingRef
 
 struct Server::Priv
 {
-	Priv(const Identity & self);
+	Priv(const Identity & self, vector<unique_ptr<Service>> && svcs);
 	~Priv();
 	void doListen();
 	void doAnnounce();
@@ -147,6 +152,8 @@ struct Server::Priv
 	bool finish = false;
 
 	Identity self;
+	vector<unique_ptr<Service>> services;
+
 	thread threadListen;
 	thread threadAnnounce;
 

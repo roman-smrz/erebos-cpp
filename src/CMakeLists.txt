@@ -7,5 +7,6 @@ add_library(erebos
 	identity
 	network
 	pubkey
+	service
 	storage
 )
