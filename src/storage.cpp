@@ -536,6 +536,34 @@ const Storage & Ref::storage() const
 }
 
 
+ZonedTime::ZonedTime(string str)
+{
+	intmax_t t;
+	unsigned int h, m;
+	char sign[2];
+	if (sscanf(str.c_str(), "%jd %1[+-]%2u%2u", &t, sign, &h, &m) != 4)
+		throw runtime_error("invalid zoned time");
+
+	time = std::chrono::system_clock::time_point(std::chrono::seconds(t));
+	zone = std::chrono::minutes((sign[0] == '-' ? -1 : 1) * (60 * h + m));
+}
+
+ZonedTime::operator string() const
+{
+	char buf[32];
+	unsigned int az = std::chrono::abs(zone).count();
+	snprintf(buf, sizeof(buf), "%jd %c%02u%02u",
+			(intmax_t) std::chrono::duration_cast<std::chrono::seconds>(time.time_since_epoch()).count(),
+			zone < decltype(zone)::zero() ? '-' : '+', az / 60, az % 60);
+	return string(buf);
+}
+
+ZonedTime ZonedTime::now()
+{
+	return ZonedTime(std::chrono::system_clock::now());
+}
+
+
 UUID::UUID(string str)
 {
 	if (uuid_parse(str.c_str(), uuid) != 0)
@@ -587,6 +615,14 @@ optional<vector<uint8_t>> RecordT<S>::Item::asBinary() const
 {
 	if (holds_alternative<vector<uint8_t>>(value))
 		return std::get<vector<uint8_t>>(value);
+	return nullopt;
+}
+
+template<class S>
+optional<ZonedTime> RecordT<S>::Item::asDate() const
+{
+	if (holds_alternative<ZonedTime>(value))
+		return std::get<ZonedTime>(value);
 	return nullopt;
 }
 
@@ -655,6 +691,8 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 			items->emplace_back(name, value);
 		else if (type == "b")
 			items->emplace_back(name, base64::decode(value));
+		else if (type == "d")
+			items->emplace_back(name, ZonedTime(value));
 		else if (type == "u")
 			items->emplace_back(name, UUID(value));
 		else if (type == "r.b2") {
@@ -736,6 +774,9 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 		} else if (auto x = item.asBinary()) {
 			type = "b";
 			value = base64::encode(*x);
+		} else if (auto x = item.asDate()) {
+			type = "d";
+			value = string(*x);
 		} else if (auto x = item.asUUID()) {
 			type = "u";
 			value = string(*x);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -156,6 +157,18 @@ protected:
 	Ref(const std::shared_ptr<const Priv> p): PartialRef(p) {}
 };
 
+struct ZonedTime
+{
+	explicit ZonedTime(std::string);
+	ZonedTime(std::chrono::system_clock::time_point t): time(t), zone(0) {}
+	explicit operator std::string() const;
+
+	static ZonedTime now();
+
+	std::chrono::system_clock::time_point time;
+	std::chrono::minutes zone; // zone offset
+};
+
 struct UUID
 {
 	explicit UUID(std::string);
@@ -184,6 +197,7 @@ public:
 			int,
 			std::string,
 			std::vector<uint8_t>,
+			ZonedTime,
 			UUID,
 			typename S::Ref,
 			UnknownType> Variant;
@@ -204,6 +218,7 @@ public:
 		std::optional<int> asInteger() const;
 		std::optional<std::string> asText() const;
 		std::optional<std::vector<uint8_t>> asBinary() const;
+		std::optional<ZonedTime> asDate() const;
 		std::optional<UUID> asUUID() const;
 		std::optional<typename S::Ref> asRef() const;
 		std::optional<UnknownType> asUnknown() const;
