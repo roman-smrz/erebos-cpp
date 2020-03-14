@@ -16,6 +16,8 @@ public:
 
 	Stored<class PublicKey> keyMessage() const;
 
+	bool sameAs(const Identity &) const;
+
 	std::optional<Ref> ref() const;
 
 	class Builder

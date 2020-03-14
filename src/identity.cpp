@@ -58,6 +58,13 @@ Stored<PublicKey> Identity::keyMessage() const
 	return p->keyMessage;
 }
 
+bool Identity::sameAs(const Identity & other) const
+{
+	// TODO: proper identity check
+	return p->data[0]->data->keyIdentity ==
+		other.p->data[0]->data->keyIdentity;
+}
+
 optional<Ref> Identity::ref() const
 {
 	if (p->data.size() == 1)

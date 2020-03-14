@@ -5,6 +5,7 @@ include_directories(
 add_library(erebos
 	channel
 	identity
+	message
 	network
 	pubkey
 	service
