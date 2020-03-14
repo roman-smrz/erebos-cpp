@@ -68,14 +68,14 @@ SecretKey SecretKey::generate(const Storage & st)
 	EVP_PKEY_get_raw_private_key(seckey.get(), nullptr, &keyLen);
 	keyData.resize(keyLen);
 	EVP_PKEY_get_raw_private_key(seckey.get(), keyData.data(), &keyLen);
-	st.storeKey(pubkey.ref, keyData);
+	st.storeKey(pubkey.ref(), keyData);
 
 	return SecretKey(std::move(seckey), pubkey);
 }
 
 optional<SecretKey> SecretKey::load(const Stored<PublicKey> & pub)
 {
-	auto keyData = pub.ref.storage().loadKey(pub.ref);
+	auto keyData = pub.ref().storage().loadKey(pub.ref());
 	if (!keyData)
 		return nullopt;
 
@@ -211,14 +211,14 @@ SecretKexKey SecretKexKey::generate(const Storage & st)
 	EVP_PKEY_get_raw_private_key(seckey.get(), nullptr, &keyLen);
 	keyData.resize(keyLen);
 	EVP_PKEY_get_raw_private_key(seckey.get(), keyData.data(), &keyLen);
-	st.storeKey(pubkey.ref, keyData);
+	st.storeKey(pubkey.ref(), keyData);
 
 	return SecretKexKey(std::move(seckey), pubkey);
 }
 
 optional<SecretKexKey> SecretKexKey::load(const Stored<PublicKexKey> & pub)
 {
-	auto keyData = pub.ref.storage().loadKey(pub.ref);
+	auto keyData = pub.ref().storage().loadKey(pub.ref());
 	if (!keyData)
 		return nullopt;
 

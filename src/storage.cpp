@@ -1,7 +1,6 @@
 #include "storage.h"
 #include "base64.h"
 
-#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <fstream>
@@ -943,7 +942,7 @@ vector<Stored<Object>> erebos::collectStoredObjects(const Stored<Object> & from)
 		auto cur = queue.back();
 		queue.pop_back();
 
-		auto [it, added] = seen.insert(cur.ref.digest());
+		auto [it, added] = seen.insert(cur.ref().digest());
 		if (!added)
 			continue;
 

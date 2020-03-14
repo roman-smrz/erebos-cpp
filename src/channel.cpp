@@ -84,7 +84,7 @@ optional<ChannelAcceptData> ChannelAcceptData::load(const Ref & ref)
 
 Stored<Channel> ChannelAcceptData::channel() const
 {
-	const auto & st = request.ref.storage();
+	const auto & st = request.ref().storage();
 
 	if (auto secret = SecretKexKey::load(key))
 		return st.store(Channel(
@@ -166,12 +166,12 @@ optional<Stored<ChannelAccept>> Channel::acceptRequest(const Identity & self,
 	auto & peers = request->data->peers;
 	if (peers.size() != 2 ||
 			std::none_of(peers.begin(), peers.end(), [&self](const auto & x)
-				{ return x.ref.digest() == self.ref()->digest(); }) ||
+				{ return x.ref().digest() == self.ref()->digest(); }) ||
 			std::none_of(peers.begin(), peers.end(), [&peer](const auto & x)
-				{ return x.ref.digest() == peer.ref()->digest(); }))
+				{ return x.ref().digest() == peer.ref()->digest(); }))
 		return nullopt;
 
-	auto & st = request.ref.storage();
+	auto & st = request.ref().storage();
 
 	auto signKey = SecretKey::load(self.keyMessage());
 	if (!signKey)

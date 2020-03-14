@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
@@ -120,7 +121,9 @@ class PartialRef
 {
 public:
 	PartialRef(const PartialRef &) = default;
-	PartialRef & operator=(const PartialRef &) = delete;
+	PartialRef(PartialRef &&) = default;
+	PartialRef & operator=(const PartialRef &) = default;
+	PartialRef & operator=(PartialRef &&) = default;
 
 	static PartialRef create(PartialStorage, const Digest &);
 
@@ -135,7 +138,7 @@ public:
 protected:
 	friend class Storage;
 	struct Priv;
-	const std::shared_ptr<const Priv> p;
+	std::shared_ptr<const Priv> p;
 	PartialRef(const std::shared_ptr<const Priv> p): p(p) {}
 };
 
@@ -143,7 +146,9 @@ class Ref : public PartialRef
 {
 public:
 	Ref(const Ref &) = default;
-	Ref & operator=(const Ref &) = delete;
+	Ref(Ref &&) = default;
+	Ref & operator=(const Ref &) = default;
+	Ref & operator=(Ref &&) = default;
 
 	static std::optional<Ref> create(Storage, const Digest &);
 
@@ -208,7 +213,7 @@ public:
 			name(name), value(value) {}
 		template<typename T>
 		Item(const std::string & name, const Stored<T> & value):
-			Item(name, value.ref) {}
+			Item(name, value.ref()) {}
 
 		Item(const Item &) = default;
 		Item & operator=(const Item &) = delete;
@@ -327,33 +332,42 @@ std::optional<Stored<T>> RecordT<S>::Item::as() const
 template<typename T>
 class Stored
 {
-	Stored(Ref ref, std::shared_ptr<T> val): ref(ref), val(val) {}
+	Stored(Ref ref, std::shared_ptr<T> val): mref(ref), mval(val) {}
 	friend class Storage;
 public:
+	Stored(const Stored &) = default;
+	Stored(Stored &&) = default;
+	Stored & operator=(const Stored &) = default;
+	Stored & operator=(Stored &&) = default;
+
 	static std::optional<Stored<T>> load(const Ref &);
 	Ref store(const Storage &) const;
 
 	bool operator==(const Stored<T> & other) const
-	{ return ref.digest() == other.ref.digest(); }
+	{ return mref.digest() == other.mref.digest(); }
 	bool operator!=(const Stored<T> & other) const
-	{ return ref.digest() != other.ref.digest(); }
+	{ return mref.digest() != other.mref.digest(); }
 	bool operator<(const Stored<T> & other) const
-	{ return ref.digest() < other.ref.digest(); }
+	{ return mref.digest() < other.mref.digest(); }
 	bool operator<=(const Stored<T> & other) const
-	{ return ref.digest() <= other.ref.digest(); }
+	{ return mref.digest() <= other.mref.digest(); }
 	bool operator>(const Stored<T> & other) const
-	{ return ref.digest() > other.ref.digest(); }
+	{ return mref.digest() > other.mref.digest(); }
 	bool operator>=(const Stored<T> & other) const
-	{ return ref.digest() >= other.ref.digest(); }
+	{ return mref.digest() >= other.mref.digest(); }
 
-	const T & operator*() const { return *val; }
-	const T * operator->() const { return val.get(); }
+	const T & operator*() const { return *mval; }
+	const T * operator->() const { return mval.get(); }
 
 	std::vector<Stored<T>> previous() const;
 	bool precedes(const Stored<T> &) const;
 
-	const Ref ref;
-	const std::shared_ptr<T> val;
+	const Ref & ref() const { return mref; }
+	const std::shared_ptr<T> & value() const { return mval; }
+
+private:
+	Ref mref;
+	std::shared_ptr<T> mval;
 };
 
 template<typename T>
@@ -373,15 +387,15 @@ std::optional<Stored<T>> Stored<T>::load(const Ref & ref)
 template<typename T>
 Ref Stored<T>::store(const Storage & st) const
 {
-	if (st == ref.storage())
-		return ref;
-	return st.storeObject(*ref);
+	if (st == mref.storage())
+		return mref;
+	return st.storeObject(*mref);
 }
 
 template<typename T>
 std::vector<Stored<T>> Stored<T>::previous() const
 {
-	auto rec = ref->asRecord();
+	auto rec = mref->asRecord();
 	if (!rec)
 		return {};
 
@@ -413,6 +427,30 @@ bool Stored<T>::precedes(const Stored<T> & other) const
 			return true;
 	}
 	return false;
+}
+
+template<typename T>
+void filterAncestors(std::vector<Stored<T>> & xs)
+{
+	if (xs.size() < 2)
+		return;
+
+	std::sort(xs.begin(), xs.end());
+	xs.erase(std::unique(xs.begin(), xs.end()), xs.end());
+
+	std::vector<Stored<T>> old;
+	old.swap(xs);
+
+	for (auto i = old.begin(); i != old.end(); i++) {
+		bool add = true;
+		for (auto j = i + 1; j != old.end(); j++)
+			if (i->precedes(*j)) {
+				add = false;
+				break;
+			}
+		if (add)
+			xs.push_back(std::move(*i));
+	}
 }
 
 }

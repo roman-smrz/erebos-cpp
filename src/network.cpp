@@ -299,7 +299,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 {
 	unordered_set<Digest> plaintextRefs;
 	for (const auto & obj : collectStoredObjects(*Stored<Object>::load(*self.ref())))
-		plaintextRefs.insert(obj.ref.digest());
+		plaintextRefs.insert(obj.ref().digest());
 
 	optional<UUID> serviceType;
 
@@ -308,7 +308,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 		case TransportHeader::Type::Acknowledged:
 			if (auto pref = std::get<PartialRef>(item.value)) {
 				if (holds_alternative<Stored<ChannelAccept>>(peer.channel) &&
-						std::get<Stored<ChannelAccept>>(peer.channel).ref.digest() == pref.digest())
+						std::get<Stored<ChannelAccept>>(peer.channel).ref().digest() == pref.digest())
 					peer.channel.emplace<Stored<Channel>>
 						(std::get<Stored<ChannelAccept>>(peer.channel)->data->channel());
 			}
@@ -371,7 +371,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 				reply.header({ TransportHeader::Type::Acknowledged, pref });
 
 				if (holds_alternative<Stored<ChannelRequest>>(peer.channel) &&
-						std::get<Stored<ChannelRequest>>(peer.channel).ref.digest() < pref.digest())
+						std::get<Stored<ChannelRequest>>(peer.channel).ref().digest() < pref.digest())
 					break;
 
 				if (holds_alternative<Stored<ChannelAccept>>(peer.channel))
@@ -392,7 +392,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 		case TransportHeader::Type::ChannelAccept:
 			if (auto pref = std::get<PartialRef>(item.value)) {
 				if (holds_alternative<Stored<ChannelAccept>>(peer.channel) &&
-						std::get<Stored<ChannelAccept>>(peer.channel).ref.digest() < pref.digest())
+						std::get<Stored<ChannelAccept>>(peer.channel).ref().digest() < pref.digest())
 					break;
 
 				auto cres = peer.tempStorage.copy(pref);
@@ -475,12 +475,12 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 		auto req = Channel::generateRequest(tempStorage,
 				server.self, std::get<Identity>(identity));
 		channel.emplace<Stored<ChannelRequest>>(req);
-		reply.header({ TransportHeader::Type::ChannelRequest, req.ref });
-		reply.body(req.ref);
-		reply.body(req->data.ref);
-		reply.body(req->data->key.ref);
+		reply.header({ TransportHeader::Type::ChannelRequest, req.ref() });
+		reply.body(req.ref());
+		reply.body(req->data.ref());
+		reply.body(req->data->key.ref());
 		for (const auto & sig : req->sigs)
-			reply.body(sig.ref);
+			reply.body(sig.ref());
 	}
 
 	if (holds_alternative<shared_ptr<WaitingRef>>(channel)) {
@@ -488,12 +488,12 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 			if (auto req = Stored<ChannelRequest>::load(*ref)) {
 				if (auto acc = Channel::acceptRequest(server.self, std::get<Identity>(identity), *req)) {
 					channel.emplace<Stored<ChannelAccept>>(*acc);
-					reply.header({ TransportHeader::Type::ChannelAccept, acc->ref });
-					reply.body(acc->ref);
-					reply.body(acc.value()->data.ref);
-					reply.body(acc.value()->data->key.ref);
+					reply.header({ TransportHeader::Type::ChannelAccept, acc->ref() });
+					reply.body(acc->ref());
+					reply.body(acc.value()->data.ref());
+					reply.body(acc.value()->data->key.ref());
 					for (const auto & sig : acc.value()->sigs)
-						reply.body(sig.ref);
+						reply.body(sig.ref());
 				} else {
 					channel = monostate();
 				}

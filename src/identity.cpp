@@ -61,7 +61,7 @@ Stored<PublicKey> Identity::keyMessage() const
 optional<Ref> Identity::ref() const
 {
 	if (p->data.size() == 1)
-		return p->data[0].ref;
+		return p->data[0].ref();
 	return nullopt;
 }
 
@@ -77,7 +77,7 @@ Identity::Builder Identity::create(const Storage & st)
 Identity::Builder Identity::modify() const
 {
 	return Builder (new Builder::Priv {
-		.storage = p->data[0].ref.storage(),
+		.storage = p->data[0].ref().storage(),
 		.prev = p->data,
 		.keyIdentity = p->data[0]->data->keyIdentity,
 		.keyMessage = p->data[0]->data->keyMessage,
@@ -146,14 +146,14 @@ Ref IdentityData::store(const Storage & st) const
 	vector<Record::Item> items;
 
 	for (const auto p : prev)
-		items.emplace_back("SPREV", p.ref);
+		items.emplace_back("SPREV", p.ref());
 	if (name)
 		items.emplace_back("name", *name);
 	if (owner)
-		items.emplace_back("owner", owner->ref);
-	items.emplace_back("key-id", keyIdentity.ref);
+		items.emplace_back("owner", owner->ref());
+	items.emplace_back("key-id", keyIdentity.ref());
 	if (keyMessage)
-		items.emplace_back("key-msg", keyMessage->ref);
+		items.emplace_back("key-msg", keyMessage->ref());
 
 	return st.storeObject(Record(std::move(items)));
 }
