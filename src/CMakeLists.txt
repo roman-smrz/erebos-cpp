@@ -10,4 +10,6 @@ add_library(erebos
 	pubkey
 	service
 	storage
+	time
+	uuid
 )

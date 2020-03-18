@@ -1,8 +1,10 @@
 #pragma once
 
+#include <erebos/time.h>
+#include <erebos/uuid.h>
+
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -10,8 +12,6 @@
 #include <string>
 #include <variant>
 #include <vector>
-
-#include <uuid/uuid.h>
 
 namespace erebos {
 
@@ -160,29 +160,6 @@ public:
 
 protected:
 	Ref(const std::shared_ptr<const Priv> p): PartialRef(p) {}
-};
-
-struct ZonedTime
-{
-	explicit ZonedTime(std::string);
-	ZonedTime(std::chrono::system_clock::time_point t): time(t), zone(0) {}
-	explicit operator std::string() const;
-
-	static ZonedTime now();
-
-	std::chrono::system_clock::time_point time;
-	std::chrono::minutes zone; // zone offset
-};
-
-struct UUID
-{
-	explicit UUID(std::string);
-	explicit operator std::string() const;
-
-	bool operator==(const UUID &) const;
-	bool operator!=(const UUID &) const;
-
-	uuid_t uuid;
 };
 
 template<class S>

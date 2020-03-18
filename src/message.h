@@ -3,6 +3,7 @@
 #include <erebos/identity.h>
 #include <erebos/message.h>
 #include <erebos/storage.h>
+#include <erebos/time.h>
 
 #include <mutex>
 #include <vector>

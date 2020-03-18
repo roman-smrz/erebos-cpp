@@ -15,7 +15,7 @@ class DirectMessage
 {
 public:
 	const Identity & from() const;
-	const ZonedTime & time() const;
+	const struct ZonedTime & time() const;
 	const std::string & text() const;
 
 private:

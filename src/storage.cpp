@@ -535,58 +535,6 @@ const Storage & Ref::storage() const
 }
 
 
-ZonedTime::ZonedTime(string str)
-{
-	intmax_t t;
-	unsigned int h, m;
-	char sign[2];
-	if (sscanf(str.c_str(), "%jd %1[+-]%2u%2u", &t, sign, &h, &m) != 4)
-		throw runtime_error("invalid zoned time");
-
-	time = std::chrono::system_clock::time_point(std::chrono::seconds(t));
-	zone = std::chrono::minutes((sign[0] == '-' ? -1 : 1) * (60 * h + m));
-}
-
-ZonedTime::operator string() const
-{
-	char buf[32];
-	unsigned int az = std::chrono::abs(zone).count();
-	snprintf(buf, sizeof(buf), "%jd %c%02u%02u",
-			(intmax_t) std::chrono::duration_cast<std::chrono::seconds>(time.time_since_epoch()).count(),
-			zone < decltype(zone)::zero() ? '-' : '+', az / 60, az % 60);
-	return string(buf);
-}
-
-ZonedTime ZonedTime::now()
-{
-	return ZonedTime(std::chrono::system_clock::now());
-}
-
-
-UUID::UUID(string str)
-{
-	if (uuid_parse(str.c_str(), uuid) != 0)
-		throw runtime_error("invalid UUID");
-}
-
-UUID::operator string() const
-{
-	string str(UUID_STR_LEN - 1, '\0');
-	uuid_unparse_lower(uuid, str.data());
-	return str;
-}
-
-bool UUID::operator==(const UUID & other) const
-{
-	return std::equal(std::begin(uuid), std::end(uuid), std::begin(other.uuid));
-}
-
-bool UUID::operator!=(const UUID & other) const
-{
-	return !(*this == other);
-}
-
-
 template<class S>
 RecordT<S>::Item::operator bool() const
 {

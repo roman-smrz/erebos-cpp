@@ -1,6 +1,8 @@
 #pragma once
 
-#include <erebos/storage.h>
+#include <erebos/uuid.h>
+
+#include <memory>
 
 namespace erebos {
 
@@ -17,7 +19,7 @@ public:
 		Context(Priv *);
 		Priv & priv();
 
-		const Ref & ref() const;
+		const class Ref & ref() const;
 		const class Peer & peer() const;
 
 	private:
