@@ -1,7 +1,6 @@
 #pragma once
 
-#include <uuid/uuid.h>
-
+#include <array>
 #include <string>
 
 namespace erebos {
@@ -14,7 +13,7 @@ struct UUID
 	bool operator==(const UUID &) const;
 	bool operator!=(const UUID &) const;
 
-	uuid_t uuid;
+	std::array<uint8_t, 16> uuid;
 };
 
 }
