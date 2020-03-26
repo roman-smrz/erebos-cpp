@@ -223,13 +223,14 @@ void DirectMessageService::handle(Context & ctx) const
 	auto pid = ctx.peer().identity();
 	if (!pid)
 		return;
+	auto powner = pid->finalOwner();
 
 	unique_lock lock(threadLock);
 
-	vector<Stored<DirectMessageData>> head(DirectMessageThread::Priv::getThreadLocked(*pid).p->head);
+	vector<Stored<DirectMessageData>> head(DirectMessageThread::Priv::getThreadLocked(powner).p->head);
 	head.push_back(*dm);
 	filterAncestors(head);
-	auto dmt = DirectMessageThread::Priv::updateThreadLocked(*pid, std::move(head));
+	auto dmt = DirectMessageThread::Priv::updateThreadLocked(powner, std::move(head));
 
 	lock.unlock();
 
@@ -246,7 +247,7 @@ void DirectMessageService::onUpdate(ThreadWatcher w)
 DirectMessageThread DirectMessageService::thread(const Identity & peer)
 {
 	scoped_lock lock(threadLock);
-	return DirectMessageThread::Priv::getThreadLocked(peer);
+	return DirectMessageThread::Priv::getThreadLocked(peer.finalOwner());
 }
 
 DirectMessage DirectMessageService::send(const Identity & from, const Peer & peer, const string & text)
@@ -254,17 +255,18 @@ DirectMessage DirectMessageService::send(const Identity & from, const Peer & pee
 	auto pid = peer.identity();
 	if (!pid)
 		throw std::runtime_error("Peer without known identity");
+	auto powner = pid->finalOwner();
 
 	scoped_lock lock(threadLock);
 
 	auto msg = from.ref()->storage().store(DirectMessageData {
-		.prev = DirectMessageThread::Priv::getThreadLocked(*pid).p->head,
-		.from = from,
+		.prev = DirectMessageThread::Priv::getThreadLocked(powner).p->head,
+		.from = from.finalOwner(),
 		.time = ZonedTime::now(),
 		.text = text,
 	});
 
-	DirectMessageThread::Priv::updateThreadLocked(*pid, { msg });
+	DirectMessageThread::Priv::updateThreadLocked(powner, { msg });
 	peer.send(myUUID, msg.ref());
 
 	return DirectMessage(new DirectMessage::Priv {
