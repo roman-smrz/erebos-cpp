@@ -7,6 +7,7 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -313,7 +314,7 @@ std::optional<Stored<T>> RecordT<S>::Item::as() const
 template<typename T>
 class Stored
 {
-	Stored(Ref ref, std::shared_ptr<T> val): mref(ref), mval(val) {}
+	Stored(Ref ref, std::future<T> && val): mref(ref), mval(std::move(val)) {}
 	friend class Storage;
 public:
 	Stored(const Stored &) = default;
@@ -337,30 +338,33 @@ public:
 	bool operator>=(const Stored<T> & other) const
 	{ return mref.digest() >= other.mref.digest(); }
 
-	const T & operator*() const { return *mval; }
-	const T * operator->() const { return mval.get(); }
+	const T & operator*() const { return mval.get(); }
+	const T * operator->() const { return &mval.get(); }
 
 	std::vector<Stored<T>> previous() const;
 	bool precedes(const Stored<T> &) const;
 
 	const Ref & ref() const { return mref; }
-	const std::shared_ptr<T> & value() const { return mval; }
 
 private:
 	Ref mref;
-	std::shared_ptr<T> mval;
+	std::shared_future<T> mval;
 };
 
 template<typename T>
 Stored<T> Storage::store(const T & val) const
 {
-	return Stored(val.store(*this), std::make_shared<T>(val));
+	return Stored(val.store(*this), std::async(std::launch::deferred, [val] {
+		return val;
+	}));
 }
 
 template<typename T>
 Stored<T> Stored<T>::load(const Ref & ref)
 {
-	return Stored(ref, std::make_shared<T>(T::load(ref)));
+	return Stored(ref, std::async(std::launch::deferred, [ref] {
+		return T::load(ref);
+	}));
 }
 
 template<typename T>

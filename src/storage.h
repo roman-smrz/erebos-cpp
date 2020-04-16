@@ -2,7 +2,6 @@
 
 #include "erebos/storage.h"
 
-#include <future>
 #include <unordered_map>
 #include <unordered_set>
 
