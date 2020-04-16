@@ -13,7 +13,7 @@ namespace erebos {
 class IdentityData
 {
 public:
-	static optional<IdentityData> load(const Ref &);
+	static IdentityData load(const Ref &);
 	Ref store(const Storage & st) const;
 
 	const vector<Stored<Signed<IdentityData>>> prev;

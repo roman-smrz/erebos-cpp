@@ -9,7 +9,7 @@ namespace erebos {
 struct ChannelRequestData
 {
 	Ref store(const Storage & st) const;
-	static optional<ChannelRequestData> load(const Ref &);
+	static ChannelRequestData load(const Ref &);
 
 	const vector<Stored<Signed<IdentityData>>> peers;
 	const Stored<PublicKexKey> key;
@@ -20,7 +20,7 @@ typedef Signed<ChannelRequestData> ChannelRequest;
 struct ChannelAcceptData
 {
 	Ref store(const Storage & st) const;
-	static optional<ChannelAcceptData> load(const Ref &);
+	static ChannelAcceptData load(const Ref &);
 
 	Stored<class Channel> channel() const;
 
@@ -40,7 +40,7 @@ public:
 	{}
 
 	Ref store(const Storage & st) const;
-	static optional<Channel> load(const Ref &);
+	static Channel load(const Ref &);
 
 	static Stored<ChannelRequest> generateRequest(const Storage &,
 			const Identity & self, const Identity & peer);

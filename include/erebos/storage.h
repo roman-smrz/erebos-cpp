@@ -72,6 +72,7 @@ public:
 	PartialStorage derivePartialStorage() const;
 
 	std::optional<Ref> ref(const Digest &) const;
+	Ref zref() const;
 
 	std::optional<Object> loadObject(const Digest &) const;
 	Ref storeObject(const Object &) const;
@@ -103,6 +104,7 @@ public:
 	explicit Digest(std::array<uint8_t, size> value): value(value) {}
 	explicit Digest(const std::string &);
 	explicit operator std::string() const;
+	bool isZero() const;
 
 	const std::array<uint8_t, size> & arr() const { return value; }
 
@@ -151,6 +153,7 @@ public:
 	Ref & operator=(Ref &&) = default;
 
 	static std::optional<Ref> create(Storage, const Digest &);
+	static Ref zcreate(Storage);
 
 	constexpr operator bool() const { return true; }
 	const Object operator*() const;
@@ -265,7 +268,8 @@ class ObjectT
 public:
 	typedef std::variant<
 		RecordT<S>,
-		Blob> Variants;
+		Blob,
+		std::monostate> Variants;
 
 	ObjectT(const ObjectT<S> &) = default;
 	ObjectT(Variants content): content(content) {}
@@ -282,7 +286,7 @@ public:
 			std::vector<uint8_t>::const_iterator);
 	static std::vector<ObjectT<S>> decodeMany(const S &, const std::vector<uint8_t> &);
 	std::vector<uint8_t> encode() const;
-	static std::optional<ObjectT<S>> load(const typename S::Ref &);
+	static ObjectT<S> load(const typename S::Ref &);
 
 	std::optional<RecordT<S>> asRecord() const;
 	std::optional<Blob> asBlob() const;
@@ -317,7 +321,7 @@ public:
 	Stored & operator=(const Stored &) = default;
 	Stored & operator=(Stored &&) = default;
 
-	static std::optional<Stored<T>> load(const Ref &);
+	static Stored<T> load(const Ref &);
 	Ref store(const Storage &) const;
 
 	bool operator==(const Stored<T> & other) const
@@ -354,11 +358,9 @@ Stored<T> Storage::store(const T & val) const
 }
 
 template<typename T>
-std::optional<Stored<T>> Stored<T>::load(const Ref & ref)
+Stored<T> Stored<T>::load(const Ref & ref)
 {
-	if (auto val = T::load(ref))
-		return Stored(ref, std::make_shared<T>(val.value()));
-	return std::nullopt;
+	return Stored(ref, std::make_shared<T>(T::load(ref)));
 }
 
 template<typename T>

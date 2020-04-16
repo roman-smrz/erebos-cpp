@@ -24,12 +24,8 @@ optional<Identity> Identity::load(const vector<Ref> & refs)
 	vector<Stored<Signed<IdentityData>>> data;
 	data.reserve(refs.size());
 
-	for (const auto & ref : refs) {
-		auto d = Stored<Signed<IdentityData>>::load(ref);
-		if (!d)
-			return nullopt;
-		data.push_back(*d);
-	}
+	for (const auto & ref : refs)
+		data.push_back(Stored<Signed<IdentityData>>::load(ref));
 
 	if (auto ptr = Priv::validate(data))
 		return Identity(ptr);
@@ -124,27 +120,30 @@ void Identity::Builder::owner(const Identity & val)
 	p->owner.emplace(val);
 }
 
-optional<IdentityData> IdentityData::load(const Ref & ref)
+IdentityData IdentityData::load(const Ref & ref)
 {
-	auto rec = ref->asRecord();
-	if (!rec)
-		return nullopt;
+	if (auto rec = ref->asRecord()) {
+		vector<Stored<Signed<IdentityData>>> prev;
+		for (auto p : rec->items("SPREV"))
+			if (const auto & x = p.as<Signed<IdentityData>>())
+				prev.push_back(x.value());
 
-	vector<Stored<Signed<IdentityData>>> prev;
-	for (auto p : rec->items("SPREV"))
-		if (const auto & x = p.as<Signed<IdentityData>>())
-			prev.push_back(x.value());
-
-	auto keyIdentity = rec->item("key-id").as<PublicKey>();
-	if (!keyIdentity)
-		return nullopt;
+		if (auto keyIdentity = rec->item("key-id").as<PublicKey>())
+			return IdentityData {
+				.prev = std::move(prev),
+				.name = rec->item("name").asText(),
+				.owner = rec->item("owner").as<Signed<IdentityData>>(),
+				.keyIdentity = keyIdentity.value(),
+				.keyMessage = rec->item("key-msg").as<PublicKey>(),
+			};
+	}
 
 	return IdentityData {
-		.prev = std::move(prev),
-		.name = rec->item("name").asText(),
-		.owner = rec->item("owner").as<Signed<IdentityData>>(),
-		.keyIdentity = keyIdentity.value(),
-		.keyMessage = rec->item("key-msg").as<PublicKey>(),
+		.prev = {},
+		.name = nullopt,
+		.owner = nullopt,
+		.keyIdentity = Stored<PublicKey>::load(ref.storage().zref()),
+		.keyMessage = nullopt,
 	};
 }
 

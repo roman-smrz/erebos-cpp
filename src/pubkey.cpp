@@ -8,11 +8,11 @@ using std::string;
 
 using namespace erebos;
 
-optional<PublicKey> PublicKey::load(const Ref & ref)
+PublicKey PublicKey::load(const Ref & ref)
 {
 	auto rec = ref->asRecord();
 	if (!rec)
-		return nullopt;
+		return PublicKey(nullptr);
 
 	if (auto ktype = rec->item("type").asText())
 		if (ktype.value() != "ed25519")
@@ -22,7 +22,7 @@ optional<PublicKey> PublicKey::load(const Ref & ref)
 		return PublicKey(EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr,
 					pubkey.value().data(), pubkey.value().size()));
 
-	return nullopt;
+	return PublicKey(nullptr);
 }
 
 Ref PublicKey::store(const Storage & st) const
@@ -31,12 +31,14 @@ Ref PublicKey::store(const Storage & st) const
 
 	items.emplace_back("type", "ed25519");
 
-	vector<uint8_t> keyData;
-	size_t keyLen;
-	EVP_PKEY_get_raw_public_key(key.get(), nullptr, &keyLen);
-	keyData.resize(keyLen);
-	EVP_PKEY_get_raw_public_key(key.get(), keyData.data(), &keyLen);
-	items.emplace_back("pubkey", keyData);
+	if (key) {
+		vector<uint8_t> keyData;
+		size_t keyLen;
+		EVP_PKEY_get_raw_public_key(key.get(), nullptr, &keyLen);
+		keyData.resize(keyLen);
+		EVP_PKEY_get_raw_public_key(key.get(), keyData.data(), &keyLen);
+		items.emplace_back("pubkey", keyData);
+	}
 
 	return st.storeObject(Record(std::move(items)));
 }
@@ -110,19 +112,14 @@ vector<uint8_t> SecretKey::sign(const Digest & dgst) const
 	return sigData;
 }
 
-optional<Signature> Signature::load(const Ref & ref)
+Signature Signature::load(const Ref & ref)
 {
-	auto rec = ref->asRecord();
-	if (!rec)
-		return nullopt;
+	if (auto rec = ref->asRecord())
+		if (auto key = rec->item("key").as<PublicKey>())
+			if (auto sig = rec->item("sig").asBinary())
+				return Signature(*key, *sig);
 
-	auto key = rec->item("key").as<PublicKey>();
-	auto sig = rec->item("sig").asBinary();
-
-	if (!key || !sig)
-		return nullopt;
-
-	return Signature(*key, *sig);
+	return Signature(Stored<PublicKey>::load(ref.storage().zref()), {});
 }
 
 Ref Signature::store(const Storage & st) const
@@ -151,11 +148,11 @@ bool Signature::verify(const Ref & ref) const
 }
 
 
-optional<PublicKexKey> PublicKexKey::load(const Ref & ref)
+PublicKexKey PublicKexKey::load(const Ref & ref)
 {
 	auto rec = ref->asRecord();
 	if (!rec)
-		return nullopt;
+		return PublicKexKey(nullptr);
 
 	if (auto ktype = rec->item("type").asText())
 		if (ktype.value() != "x25519")
@@ -165,7 +162,7 @@ optional<PublicKexKey> PublicKexKey::load(const Ref & ref)
 		return PublicKexKey(EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr,
 					pubkey.value().data(), pubkey.value().size()));
 
-	return nullopt;
+	return PublicKexKey(nullptr);
 }
 
 Ref PublicKexKey::store(const Storage & st) const
@@ -174,12 +171,14 @@ Ref PublicKexKey::store(const Storage & st) const
 
 	items.emplace_back("type", "x25519");
 
-	vector<uint8_t> keyData;
-	size_t keyLen;
-	EVP_PKEY_get_raw_public_key(key.get(), nullptr, &keyLen);
-	keyData.resize(keyLen);
-	EVP_PKEY_get_raw_public_key(key.get(), keyData.data(), &keyLen);
-	items.emplace_back("pubkey", keyData);
+	if (key) {
+		vector<uint8_t> keyData;
+		size_t keyLen;
+		EVP_PKEY_get_raw_public_key(key.get(), nullptr, &keyLen);
+		keyData.resize(keyLen);
+		EVP_PKEY_get_raw_public_key(key.get(), keyData.data(), &keyLen);
+		items.emplace_back("pubkey", keyData);
+	}
 
 	return st.storeObject(Record(std::move(items)));
 }

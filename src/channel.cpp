@@ -22,28 +22,25 @@ Ref ChannelRequestData::store(const Storage & st) const
 	return st.storeObject(Record(std::move(items)));
 }
 
-optional<ChannelRequestData> ChannelRequestData::load(const Ref & ref)
+ChannelRequestData ChannelRequestData::load(const Ref & ref)
 {
-	auto rec = ref->asRecord();
-	if (!rec)
-		return nullopt;
+	if (auto rec = ref->asRecord()) {
+		remove_const<decltype(peers)>::type peers;
+		for (const auto & i : rec->items("peer"))
+			if (auto p = i.as<Signed<IdentityData>>())
+				peers.push_back(*p);
 
-	remove_const<decltype(peers)>::type peers;
-	for (const auto & i : rec->items("peer"))
-		if (auto p = i.as<Signed<IdentityData>>())
-			peers.push_back(*p);
-
-	auto enc = rec->item("enc").asText();
-	if (!enc || enc != "aes-128-gcm")
-		return nullopt;
-
-	auto key = rec->item("key").as<PublicKexKey>();
-	if (!key)
-		return nullopt;
+		if (rec->item("enc").asText() == "aes-128-gcm")
+			if (auto key = rec->item("key").as<PublicKexKey>())
+				return ChannelRequestData {
+					.peers = std::move(peers),
+					.key = *key,
+				};
+	}
 
 	return ChannelRequestData {
-		.peers = std::move(peers),
-		.key = *key,
+		.peers = {},
+		.key = Stored<PublicKexKey>::load(ref.storage().zref()),
 	};
 }
 
@@ -58,27 +55,18 @@ Ref ChannelAcceptData::store(const Storage & st) const
 	return st.storeObject(Record(std::move(items)));
 }
 
-optional<ChannelAcceptData> ChannelAcceptData::load(const Ref & ref)
+ChannelAcceptData ChannelAcceptData::load(const Ref & ref)
 {
-	auto rec = ref->asRecord();
-	if (!rec)
-		return nullopt;
-
-	auto request = rec->item("req").as<ChannelRequest>();
-	if (!request)
-		return nullopt;
-
-	auto enc = rec->item("enc").asText();
-	if (!enc || enc != "aes-128-gcm")
-		return nullopt;
-
-	auto key = rec->item("key").as<PublicKexKey>();
-	if (!key)
-		return nullopt;
+	if (auto rec = ref->asRecord())
+		if (rec->item("enc").asText() == "aes-128-gcm")
+			return ChannelAcceptData {
+				.request = *rec->item("req").as<ChannelRequest>(),
+				.key = *rec->item("key").as<PublicKexKey>(),
+			};
 
 	return ChannelAcceptData {
-		.request = *request,
-		.key = *key,
+		.request = Stored<ChannelRequest>::load(ref.storage().zref()),
+		.key = Stored<PublicKexKey>::load(ref.storage().zref()),
 	};
 }
 
@@ -114,26 +102,20 @@ Ref Channel::store(const Storage & st) const
 	return st.storeObject(Record(std::move(items)));
 }
 
-optional<Channel> Channel::load(const Ref & ref)
+Channel Channel::load(const Ref & ref)
 {
-	auto rec = ref->asRecord();
-	if (!rec)
-		return nullopt;
+	if (auto rec = ref->asRecord()) {
+		remove_const<decltype(peers)>::type peers;
+		for (const auto & i : rec->items("peer"))
+			if (auto p = i.as<Signed<IdentityData>>())
+				peers.push_back(*p);
 
-	remove_const<decltype(peers)>::type peers;
-	for (const auto & i : rec->items("peer"))
-		if (auto p = i.as<Signed<IdentityData>>())
-			peers.push_back(*p);
+		if (rec->item("enc").asText() == "aes-128-gcm")
+			if (auto key = rec->item("key").asBinary())
+				return Channel(peers, std::move(*key));
+	}
 
-	auto enc = rec->item("enc").asText();
-	if (!enc || enc != "aes-128-gcm")
-		return nullopt;
-
-	auto key = rec->item("key").asBinary();
-	if (!key)
-		return nullopt;
-
-	return Channel(peers, std::move(*key));
+	return Channel({}, {});
 }
 
 Stored<ChannelRequest> Channel::generateRequest(const Storage & st,
@@ -146,12 +128,12 @@ Stored<ChannelRequest> Channel::generateRequest(const Storage & st,
 	return signKey->sign(st.store(ChannelRequestData {
 		.peers = self.ref()->digest() < peer.ref()->digest() ?
 			vector<Stored<Signed<IdentityData>>> {
-				*Stored<Signed<IdentityData>>::load(*self.ref()),
-				*Stored<Signed<IdentityData>>::load(*peer.ref()),
+				Stored<Signed<IdentityData>>::load(*self.ref()),
+				Stored<Signed<IdentityData>>::load(*peer.ref()),
 			} :
 			vector<Stored<Signed<IdentityData>>> {
-				*Stored<Signed<IdentityData>>::load(*peer.ref()),
-				*Stored<Signed<IdentityData>>::load(*self.ref()),
+				Stored<Signed<IdentityData>>::load(*peer.ref()),
+				Stored<Signed<IdentityData>>::load(*self.ref()),
 			},
 		.key = SecretKexKey::generate(st).pub(),
 	}));

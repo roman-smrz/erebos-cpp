@@ -19,13 +19,13 @@ namespace erebos {
 
 struct DirectMessageData
 {
-	static optional<DirectMessageData> load(const Ref &);
+	static DirectMessageData load(const Ref &);
 	Ref store(const Storage &) const;
 
 	vector<Stored<DirectMessageData>> prev;
-	Identity from;
-	ZonedTime time;
-	string text;
+	optional<Identity> from;
+	optional<ZonedTime> time;
+	optional<string> text;
 };
 
 struct DirectMessage::Priv

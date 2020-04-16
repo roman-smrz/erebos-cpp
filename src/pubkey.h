@@ -18,7 +18,7 @@ class PublicKey
 		key(key, EVP_PKEY_free) {}
 	friend class SecretKey;
 public:
-	static optional<PublicKey> load(const Ref &);
+	static PublicKey load(const Ref &);
 	Ref store(const Storage &) const;
 
 	const shared_ptr<EVP_PKEY> key;
@@ -49,7 +49,7 @@ private:
 class Signature
 {
 public:
-	static optional<Signature> load(const Ref &);
+	static Signature load(const Ref &);
 	Ref store(const Storage &) const;
 
 	bool verify(const Ref &) const;
@@ -67,7 +67,7 @@ template<typename T>
 class Signed
 {
 public:
-	static optional<Signed<T>> load(const Ref &);
+	static Signed<T> load(const Ref &);
 	Ref store(const Storage &) const;
 
 	bool isSignedBy(const Stored<PublicKey> &) const;
@@ -90,23 +90,20 @@ Stored<Signed<T>> SecretKey::sign(const Stored<T> & val) const
 }
 
 template<typename T>
-optional<Signed<T>> Signed<T>::load(const Ref & ref)
+Signed<T> Signed<T>::load(const Ref & ref)
 {
-	auto rec = ref->asRecord();
-	if (!rec)
-		return nullopt;
+	if (auto rec = ref->asRecord())
+		if (auto data = rec->item("SDATA").as<T>()) {
+			vector<Stored<Signature>> sigs;
+			for (auto item : rec->items("sig"))
+				if (auto sig = item.as<Signature>())
+					if (sig.value()->verify(data.value().ref()))
+						sigs.push_back(sig.value());
 
-	auto data = rec->item("SDATA").as<T>();
-	if (!data)
-		return nullopt;
+			return Signed(*data, sigs);
+		}
 
-	vector<Stored<Signature>> sigs;
-	for (auto item : rec->items("sig"))
-		if (auto sig = item.as<Signature>())
-			if (sig.value()->verify(data.value().ref()))
-				sigs.push_back(sig.value());
-
-	return Signed(*data, sigs);
+	return Signed(Stored<T>::load(ref.storage().zref()), {});
 }
 
 template<typename T>
@@ -137,7 +134,7 @@ class PublicKexKey
 		key(key, EVP_PKEY_free) {}
 	friend class SecretKexKey;
 public:
-	static optional<PublicKexKey> load(const Ref &);
+	static PublicKexKey load(const Ref &);
 	Ref store(const Storage &) const;
 
 	const shared_ptr<EVP_PKEY> key;

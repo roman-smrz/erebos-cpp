@@ -315,6 +315,11 @@ optional<Ref> Storage::ref(const Digest & digest) const
 	return Ref::create(*this, digest);
 }
 
+Ref Storage::zref() const
+{
+	return Ref::zcreate(*this);
+}
+
 Digest PartialStorage::Priv::storeBytes(const vector<uint8_t> & content) const
 {
 	array<uint8_t, Digest::size> arr;
@@ -346,6 +351,8 @@ optional<vector<uint8_t>> PartialStorage::Priv::loadBytes(const Digest & digest)
 
 optional<PartialObject> PartialStorage::loadObject(const Digest & digest) const
 {
+	if (digest.isZero())
+		return PartialObject(monostate());
 	if (auto content = p->loadBytes(digest))
 		return PartialObject::decode(*this, *content);
 	return nullopt;
@@ -362,6 +369,8 @@ PartialRef PartialStorage::storeObject(const Blob & val) const
 
 optional<Object> Storage::loadObject(const Digest & digest) const
 {
+	if (digest.isZero())
+		return Object(monostate());
 	if (auto content = p->loadBytes(digest))
 		return Object::decode(*this, *content);
 	return nullopt;
@@ -466,6 +475,13 @@ Digest::operator string() const
 	return res;
 }
 
+bool Digest::isZero() const
+{
+	for (uint8_t x : value)
+		if (x) return false;
+	return true;
+}
+
 
 PartialRef PartialRef::create(PartialStorage st, const Digest & digest)
 {
@@ -512,6 +528,16 @@ optional<Ref> Ref::create(Storage st, const Digest & digest)
 	auto p = new Priv {
 		.storage = make_unique<PartialStorage>(st),
 		.digest = digest,
+	};
+
+	return Ref(shared_ptr<Priv>(p));
+}
+
+Ref Ref::zcreate(Storage st)
+{
+	auto p = new Priv {
+		.storage = make_unique<PartialStorage>(st),
+		.digest = Digest(array<uint8_t, Digest::size> {}),
 	};
 
 	return Ref(shared_ptr<Priv>(p));
@@ -854,11 +880,9 @@ vector<uint8_t> ObjectT<S>::encode() const
 }
 
 template<class S>
-optional<ObjectT<S>> ObjectT<S>::load(const typename S::Ref & ref)
+ObjectT<S> ObjectT<S>::load(const typename S::Ref & ref)
 {
-	if (ref)
-		return *ref;
-	return nullopt;
+	return *ref;
 }
 
 template<class S>
@@ -899,7 +923,7 @@ vector<Stored<Object>> erebos::collectStoredObjects(const Stored<Object> & from)
 		if (auto rec = cur->asRecord())
 			for (const auto & item : rec->items())
 				if (auto ref = item.asRef())
-					queue.push_back(*Stored<Object>::load(*ref));
+					queue.push_back(Stored<Object>::load(*ref));
 	}
 
 	return res;

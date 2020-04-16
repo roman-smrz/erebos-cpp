@@ -298,7 +298,7 @@ Server::Peer & Server::Priv::getPeer(const sockaddr_in & paddr)
 void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & header, ReplyBuilder & reply)
 {
 	unordered_set<Digest> plaintextRefs;
-	for (const auto & obj : collectStoredObjects(*Stored<Object>::load(*self.ref())))
+	for (const auto & obj : collectStoredObjects(Stored<Object>::load(*self.ref())))
 		plaintextRefs.insert(obj.ref().digest());
 
 	optional<UUID> serviceType;
@@ -397,9 +397,11 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 
 				auto cres = peer.tempStorage.copy(pref);
 				if (auto r = std::get_if<Ref>(&cres)) {
-					if (auto acc = ChannelAccept::load(*r)) {
+					auto acc = ChannelAccept::load(*r);
+					if (holds_alternative<Identity>(peer.identity) &&
+							acc.isSignedBy(std::get<Identity>(peer.identity).keyMessage())) {
 						reply.header({ TransportHeader::Type::Acknowledged, pref });
-						peer.channel.emplace<Stored<Channel>>(acc->data->channel());
+						peer.channel.emplace<Stored<Channel>>(acc.data->channel());
 					}
 				}
 			}
@@ -485,8 +487,10 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 
 	if (holds_alternative<shared_ptr<WaitingRef>>(channel)) {
 		if (auto ref = std::get<shared_ptr<WaitingRef>>(channel)->check(reply)) {
-			if (auto req = Stored<ChannelRequest>::load(*ref)) {
-				if (auto acc = Channel::acceptRequest(server.self, std::get<Identity>(identity), *req)) {
+			auto req = Stored<ChannelRequest>::load(*ref);
+			if (holds_alternative<Identity>(identity) &&
+					req->isSignedBy(std::get<Identity>(identity).keyMessage())) {
+				if (auto acc = Channel::acceptRequest(server.self, std::get<Identity>(identity), req)) {
 					channel.emplace<Stored<ChannelAccept>>(*acc);
 					reply.header({ TransportHeader::Type::ChannelAccept, acc->ref() });
 					reply.body(acc->ref());

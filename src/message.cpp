@@ -48,11 +48,11 @@ DirectMessage::DirectMessage(Priv * p):
 	p(p)
 {}
 
-optional<DirectMessageData> DirectMessageData::load(const Ref & ref)
+DirectMessageData DirectMessageData::load(const Ref & ref)
 {
 	auto rec = ref->asRecord();
 	if (!rec)
-		return nullopt;
+		return DirectMessageData();
 
 	vector<Stored<DirectMessageData>> prev;
 	for (auto p : rec->items("PREV"))
@@ -60,16 +60,10 @@ optional<DirectMessageData> DirectMessageData::load(const Ref & ref)
 			prev.push_back(*x);
 
 	auto fref = rec->item("from").asRef();
-	if (!fref)
-		return nullopt;
-
-	auto from = Identity::load(*fref);
-	if (!from)
-		return nullopt;
 
 	return DirectMessageData {
 		.prev = std::move(prev),
-		.from = *from,
+		.from = fref ? Identity::load(*fref) : nullopt,
 		.time = *rec->item("time").asDate(),
 		.text = rec->item("text").asText().value(),
 	};
@@ -81,27 +75,32 @@ Ref DirectMessageData::store(const Storage & st) const
 
 	for (const auto prev : prev)
 		items.emplace_back("PREV", prev.ref());
-	items.emplace_back("from", from.ref().value());
-	items.emplace_back("time", time);
-	items.emplace_back("text", text);
+	if (from)
+		items.emplace_back("from", from->ref().value());
+	if (time)
+		items.emplace_back("time", *time);
+	if (text)
+		items.emplace_back("text", *text);
 
 	return st.storeObject(Record(std::move(items)));
 }
 
 
-const Identity & DirectMessage::from() const
+const optional<Identity> & DirectMessage::from() const
 {
 	return p->data->from;
 }
 
-const ZonedTime & DirectMessage::time() const
+const optional<ZonedTime> & DirectMessage::time() const
 {
 	return p->data->time;
 }
 
-const string & DirectMessage::text() const
+string DirectMessage::text() const
 {
-	return p->data->text;
+	if (p->data->text)
+		return p->data->text.value();
+	return "";
 }
 
 
@@ -138,7 +137,7 @@ DirectMessageThread::Iterator & DirectMessageThread::Iterator::operator++()
 		auto ncur = p->next[0];
 
 		for (const auto & m : p->next)
-			if (m->time.time >= ncur->time.time)
+			if (!ncur->time || (m->time && m->time->time >= ncur->time->time))
 				ncur = m;
 
 		p->current.emplace(DirectMessage(new DirectMessage::Priv {
@@ -216,10 +215,6 @@ UUID DirectMessageService::uuid() const
 
 void DirectMessageService::handle(Context & ctx) const
 {
-	auto dm = Stored<DirectMessageData>::load(ctx.ref());
-	if (!dm)
-		return;
-
 	auto pid = ctx.peer().identity();
 	if (!pid)
 		return;
@@ -228,7 +223,7 @@ void DirectMessageService::handle(Context & ctx) const
 	unique_lock lock(threadLock);
 
 	vector<Stored<DirectMessageData>> head(DirectMessageThread::Priv::getThreadLocked(powner).p->head);
-	head.push_back(*dm);
+	head.push_back(Stored<DirectMessageData>::load(ctx.ref()));
 	filterAncestors(head);
 	auto dmt = DirectMessageThread::Priv::updateThreadLocked(powner, std::move(head));
 

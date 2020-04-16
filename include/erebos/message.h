@@ -14,9 +14,9 @@ class Identity;
 class DirectMessage
 {
 public:
-	const Identity & from() const;
-	const struct ZonedTime & time() const;
-	const std::string & text() const;
+	const std::optional<Identity> & from() const;
+	const std::optional<struct ZonedTime> & time() const;
+	std::string text() const;
 
 private:
 	friend class DirectMessageThread;
