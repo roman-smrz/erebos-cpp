@@ -642,21 +642,31 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 	auto items = make_shared<vector<Item>>();
 
 	while (begin != end) {
-		const auto newline = std::find(begin, end, '\n');
-		if (newline == end)
+		const auto colon = std::find(begin, end, ':');
+		if (colon == end)
 			throw runtime_error("invalid record");
+		const string name(begin, colon);
 
-		const auto colon = std::find(begin, newline, ':');
-		if (colon == newline)
+		const auto space = std::find(colon + 1, end, ' ');
+		if (space == end)
 			throw runtime_error("invalid record");
+		const string type(colon + 1, space);
 
-		const auto space = std::find(colon, newline, ' ');
-		if (space == newline)
-			throw runtime_error("invalid record");
+		begin = space + 1;
+		string value;
+		for (bool cont = true; cont; ) {
+			auto newline = std::find(begin, end, '\n');
+			if (newline == end)
+				throw runtime_error("invalid record");
 
-		const auto name = string(begin, colon);
-		const auto type = string(colon + 1, space);
-		const auto value = string(space + 1, newline);
+			if (newline + 1 != end && *(newline + 1) == '\t')
+				newline++;
+			else
+				cont = false;
+
+			value.append(begin, newline);
+			begin = newline + 1;
+		}
 
 		if (type == "i")
 			items->emplace_back(name, std::stoi(value));
@@ -680,8 +690,6 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 		} else
 			items->emplace_back(name,
 					typename Item::UnknownType { type, value });
-
-		begin = newline + 1;
 	}
 
 	return RecordT<S>(items);
@@ -765,8 +773,17 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 
 		copy(type.begin(), type.end(), inserter);
 		inserter = ' ';
-		copy(value.begin(), value.end(), inserter);
-		inserter = '\n';
+
+		auto i = value.begin();
+		while (true) {
+			auto j = std::find(i, value.end(), '\n');
+			copy(i, j, inserter);
+			inserter = '\n';
+			if (j == value.end())
+				break;
+			inserter = '\t';
+			i = j + 1;
+		}
 	}
 	return res;
 }
