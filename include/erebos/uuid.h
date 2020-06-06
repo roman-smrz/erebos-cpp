@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstring>
 #include <optional>
 #include <string>
 
@@ -23,4 +24,17 @@ struct UUID
 	std::array<uint8_t, 16> uuid;
 };
 
+}
+
+namespace std
+{
+	template<> struct hash<erebos::UUID>
+	{
+		std::size_t operator()(const erebos::UUID & uuid) const noexcept
+		{
+			std::size_t res;
+			std::memcpy(&res, uuid.uuid.data(), sizeof res);
+			return res;
+		}
+	};
 }
