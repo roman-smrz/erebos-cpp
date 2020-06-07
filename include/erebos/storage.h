@@ -7,6 +7,7 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <future>
 #include <memory>
 #include <optional>
@@ -31,6 +32,7 @@ typedef ObjectT<PartialStorage> PartialObject;
 class Blob;
 
 template<typename T> class Stored;
+template<typename T> class Head;
 
 class PartialStorage
 {
@@ -87,11 +89,24 @@ public:
 
 	template<typename T> Stored<T> store(const T &) const;
 
+	template<typename T> std::optional<Head<T>> head(UUID id) const;
+	template<typename T> std::vector<Head<T>> heads() const;
+	template<typename T> Head<T> storeHead(const T &) const;
+	template<typename T> Head<T> storeHead(const Stored<T> &) const;
+
 	void storeKey(Ref pubref, const std::vector<uint8_t> &) const;
 	std::optional<std::vector<uint8_t>> loadKey(Ref pubref) const;
 
 protected:
+	template<typename T> friend class Head;
+
 	Storage(const std::shared_ptr<const Priv> p): PartialStorage(p) {}
+
+	std::optional<Ref> headRef(UUID type, UUID id) const;
+	std::vector<std::tuple<UUID, Ref>> headRefs(UUID type) const;
+	static UUID storeHead(UUID type, const Ref & ref);
+	static bool replaceHead(UUID type, UUID id, const Ref & old, const Ref & ref);
+	static std::optional<Ref> updateHead(UUID type, UUID id, const Ref & old, const std::function<Ref(const Ref &)> &);
 };
 
 class Digest
@@ -316,12 +331,14 @@ class Stored
 {
 	Stored(Ref ref, std::future<T> && val): mref(ref), mval(std::move(val)) {}
 	friend class Storage;
+	friend class Head<T>;
 public:
 	Stored(const Stored &) = default;
 	Stored(Stored &&) = default;
 	Stored & operator=(const Stored &) = default;
 	Stored & operator=(Stored &&) = default;
 
+	Stored(const Ref &);
 	static Stored<T> load(const Ref &);
 	Ref store(const Storage &) const;
 
@@ -360,11 +377,17 @@ Stored<T> Storage::store(const T & val) const
 }
 
 template<typename T>
+Stored<T>::Stored(const Ref & ref):
+	mref(ref),
+	mval(std::async(std::launch::deferred, [ref] {
+		return T::load(ref);
+	}))
+{}
+
+template<typename T>
 Stored<T> Stored<T>::load(const Ref & ref)
 {
-	return Stored(ref, std::async(std::launch::deferred, [ref] {
-		return T::load(ref);
-	}));
+	return Stored(ref);
 }
 
 template<typename T>
@@ -434,6 +457,80 @@ void filterAncestors(std::vector<Stored<T>> & xs)
 		if (add)
 			xs.push_back(std::move(*i));
 	}
+}
+
+template<class T>
+class Head
+{
+	Head(UUID id, Ref ref, std::future<T> && val):
+		mid(id), mstored(ref, std::move(val)) {}
+	friend class Storage;
+public:
+	Head(UUID id, Ref ref): mid(id), mstored(ref) {}
+
+	const T & operator*() const { return *mstored; }
+	const T * operator->() const { return &(*mstored); }
+
+	std::vector<Stored<T>> previous() const;
+	bool precedes(const Stored<T> &) const;
+
+	UUID id() const { return mid; }
+	const Stored<T> & stored() const { return mstored; }
+	const Ref & ref() const { return mstored.ref(); }
+
+	std::optional<Head<T>> update(const std::function<Stored<T>(const Stored<T> &)> &) const;
+
+private:
+	UUID mid;
+	Stored<T> mstored;
+};
+
+template<typename T>
+std::optional<Head<T>> Storage::head(UUID id) const
+{
+	if (auto ref = headRef(T::headTypeId, id))
+		return Head<T>(id, *ref);
+	return std::nullopt;
+}
+
+template<typename T>
+std::vector<Head<T>> Storage::heads() const
+{
+	std::vector<Head<T>> res;
+	for (const auto & x : headRefs(T::headTypeId))
+		res.emplace_back(std::get<UUID>(x), std::get<Ref>(x));
+	return res;
+}
+
+template<typename T>
+Head<T> Storage::storeHead(const T & val) const
+{
+	auto ref = val.store(*this);
+	auto id = storeHead(T::headTypeId, ref);
+	return Head(id, ref, std::async(std::launch::deferred, [val] {
+		return val;
+	}));
+}
+
+template<typename T>
+Head<T> Storage::storeHead(const Stored<T> & val) const
+{
+	auto id = storeHead(T::headTypeId, val.ref());
+	return Head(id, val.ref(), val.mval);
+}
+
+template<typename T>
+std::optional<Head<T>> Head<T>::update(const std::function<Stored<T>(const Stored<T> &)> & f) const
+{
+	auto res = Storage::updateHead(T::headTypeId, mid, ref(), [&f, this](const Ref & r) {
+		return f(r == ref() ? stored() : Stored<T>::load(r)).ref();
+	});
+
+	if (!res)
+		return std::nullopt;
+	if (*res == ref())
+		return *this;
+	return Head<T>(mid, *res);
 }
 
 }

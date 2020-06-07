@@ -13,6 +13,7 @@ using std::shared_ptr;
 using std::unique_ptr;
 using std::unordered_map;
 using std::unordered_set;
+using std::tuple;
 using std::variant;
 using std::vector;
 
@@ -29,6 +30,11 @@ public:
 	virtual optional<vector<uint8_t>> loadBytes(const Digest &) const = 0;
 	virtual void storeBytes(const Digest &, const vector<uint8_t> &) = 0;
 
+	virtual optional<Digest> headRef(UUID type, UUID id) const = 0;
+	virtual vector<tuple<UUID, Digest>> headRefs(UUID type) const = 0;
+	virtual UUID storeHead(UUID type, const Digest & dgst) = 0;
+	virtual bool replaceHead(UUID type, UUID id, const Digest & old, const Digest & dgst) = 0;
+
 	virtual optional<vector<uint8_t>> loadKey(const Digest &) const = 0;
 	virtual void storeKey(const Digest &, const vector<uint8_t> &) = 0;
 };
@@ -44,6 +50,11 @@ public:
 	virtual optional<vector<uint8_t>> loadBytes(const Digest &) const override;
 	virtual void storeBytes(const Digest &, const vector<uint8_t> &) override;
 
+	virtual optional<Digest> headRef(UUID type, UUID id) const override;
+	virtual vector<tuple<UUID, Digest>> headRefs(UUID type) const override;
+	virtual UUID storeHead(UUID type, const Digest & dgst) override;
+	virtual bool replaceHead(UUID type, UUID id, const Digest & old, const Digest & dgst) override;
+
 	virtual optional<vector<uint8_t>> loadKey(const Digest &) const override;
 	virtual void storeKey(const Digest &, const vector<uint8_t> &) override;
 
@@ -51,7 +62,10 @@ private:
 	static constexpr size_t CHUNK = 16384;
 
 	fs::path objectPath(const Digest &) const;
+	fs::path headPath(UUID id, UUID type) const;
 	fs::path keyPath(const Digest &) const;
+
+	FILE * openLockFile(const fs::path & path) const;
 
 	fs::path root;
 };
@@ -67,11 +81,17 @@ public:
 	virtual optional<vector<uint8_t>> loadBytes(const Digest &) const override;
 	virtual void storeBytes(const Digest &, const vector<uint8_t> &) override;
 
+	virtual optional<Digest> headRef(UUID type, UUID id) const override;
+	virtual vector<tuple<UUID, Digest>> headRefs(UUID type) const override;
+	virtual UUID storeHead(UUID type, const Digest & dgst) override;
+	virtual bool replaceHead(UUID type, UUID id, const Digest & old, const Digest & dgst) override;
+
 	virtual optional<vector<uint8_t>> loadKey(const Digest &) const override;
 	virtual void storeKey(const Digest &, const vector<uint8_t> &) override;
 
 private:
 	unordered_map<Digest, vector<uint8_t>> storage;
+	unordered_map<UUID, vector<tuple<UUID, Digest>>> heads;
 	unordered_map<Digest, vector<uint8_t>> keys;
 };
 
@@ -88,6 +108,11 @@ public:
 
 	virtual optional<vector<uint8_t>> loadBytes(const Digest &) const override;
 	virtual void storeBytes(const Digest &, const vector<uint8_t> &) override;
+
+	virtual optional<Digest> headRef(UUID type, UUID id) const override;
+	virtual vector<tuple<UUID, Digest>> headRefs(UUID type) const override;
+	virtual UUID storeHead(UUID type, const Digest & dgst) override;
+	virtual bool replaceHead(UUID type, UUID id, const Digest & old, const Digest & dgst) override;
 
 	virtual optional<vector<uint8_t>> loadKey(const Digest &) const override;
 	virtual void storeKey(const Digest &, const vector<uint8_t> &) override;

@@ -18,6 +18,7 @@ using namespace erebos;
 
 using std::array;
 using std::copy;
+using std::get;
 using std::holds_alternative;
 using std::ifstream;
 using std::is_same_v;
@@ -30,7 +31,6 @@ using std::runtime_error;
 using std::shared_ptr;
 using std::string;
 using std::to_string;
-using std::tuple;
 
 FilesystemStorage::FilesystemStorage(const fs::path & path):
 	root(path)
@@ -125,16 +125,7 @@ void FilesystemStorage::storeBytes(const Digest & digest, const vector<uint8_t> 
 	auto lock = path;
 	lock += ".lock";
 
-	fs::create_directories(path.parent_path());
-
-	// No way to use open exclusively in c++ stdlib
-	FILE *f = nullptr;
-	for (int i = 0; i < 10; i++) {
-		f = fopen(lock.c_str(), "wbxe");
-		if (f || errno != EEXIST)
-			break;
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
+	FILE * f = openLockFile(lock);
 	if (fs::exists(path)) {
 		if (f) {
 			fclose(f);
@@ -171,6 +162,81 @@ void FilesystemStorage::storeBytes(const Digest & digest, const vector<uint8_t> 
 	fs::rename(lock, path);
 }
 
+optional<Digest> FilesystemStorage::headRef(UUID type, UUID id) const
+{
+	ifstream fin(headPath(type, id));
+	if (!fin)
+		return nullopt;
+
+	string sdgst;
+	fin >> sdgst;
+	return Digest(sdgst);
+}
+
+vector<tuple<UUID, Digest>> FilesystemStorage::headRefs(UUID type) const
+{
+	vector<tuple<UUID, Digest>> res;
+	string stype(type);
+	fs::path ptype(stype.begin(), stype.end());
+	try {
+		for (const auto & p : fs::directory_iterator(root/"heads"/ptype))
+			if (auto u = UUID::fromString(p.path().filename())) {
+				ifstream fin(p.path());
+				if (fin) {
+					string sdgst;
+					fin >> sdgst;
+					res.emplace_back(*u, Digest(sdgst));
+				}
+			}
+	} catch (const fs::filesystem_error & e) {
+		if (e.code() == std::errc::no_such_file_or_directory)
+			return {};
+		throw e;
+	}
+	return res;
+}
+
+UUID FilesystemStorage::storeHead(UUID type, const Digest & dgst)
+{
+	auto id = UUID::generate();
+	auto path = headPath(type, id);
+	fs::create_directories(path.parent_path());
+	ofstream fout(path);
+	if (!fout)
+		throw runtime_error("failed to open head file");
+
+	fout << string(dgst) << '\n';
+	return id;
+}
+
+bool FilesystemStorage::replaceHead(UUID type, UUID id, const Digest & old, const Digest & dgst)
+{
+	auto path = headPath(type, id);
+	auto lock = path;
+	lock += ".lock";
+	FILE * f = openLockFile(lock);
+	if (!f)
+		throw runtime_error(("failed to lock head file " + string(path) +
+					": " + string(strerror(errno))).c_str());
+
+	string scur;
+	ifstream fin(path);
+	fin >> scur;
+	fin.close();
+	Digest cur(scur);
+
+	if (cur != old) {
+		fclose(f);
+		unlink(lock.c_str());
+		return false;
+	}
+
+	fprintf(f, "%s\n", string(dgst).c_str());
+	fclose(f);
+	fs::rename(lock, path);
+	return true;
+}
+
 optional<vector<uint8_t>> FilesystemStorage::loadKey(const Digest & pubref) const
 {
 	fs::path path = keyPath(pubref);
@@ -201,11 +267,36 @@ fs::path FilesystemStorage::objectPath(const Digest & digest) const
 		fs::path(name.begin() + 2, name.end());
 }
 
+fs::path FilesystemStorage::headPath(UUID type, UUID id) const
+{
+	string stype(type), sid(id);
+	return root/"heads"/
+		fs::path(stype.begin(), stype.end())/
+		fs::path(sid.begin(), sid.end());
+}
+
 fs::path FilesystemStorage::keyPath(const Digest & digest) const
 {
 	string name(digest);
 	return root/"keys"/fs::path(name.begin(), name.end());
 }
+
+FILE * FilesystemStorage::openLockFile(const fs::path & path) const
+{
+	fs::create_directories(path.parent_path());
+
+	// No way to use open exclusively in c++ stdlib
+	FILE *f = nullptr;
+	for (int i = 0; i < 10; i++) {
+		f = fopen(path.c_str(), "wbxe");
+		if (f || errno != EEXIST)
+			break;
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+
+	return f;
+}
+
 
 bool MemoryStorage::contains(const Digest & digest) const
 {
@@ -223,6 +314,57 @@ optional<vector<uint8_t>> MemoryStorage::loadBytes(const Digest & digest) const
 void MemoryStorage::storeBytes(const Digest & digest, const vector<uint8_t> & content)
 {
 	storage.emplace(digest, content);
+}
+
+optional<Digest> MemoryStorage::headRef(UUID type, UUID id) const
+{
+	auto it = heads.find(type);
+	if (it == heads.end())
+		return nullopt;
+
+	for (const auto & x : it->second)
+		if (get<UUID>(x) == id)
+			return get<Digest>(x);
+
+	return nullopt;
+}
+
+vector<tuple<UUID, Digest>> MemoryStorage::headRefs(UUID type) const
+{
+	auto it = heads.find(type);
+	if (it != heads.end())
+		return it->second;
+	return {};
+}
+
+UUID MemoryStorage::storeHead(UUID type, const Digest & dgst)
+{
+	auto id = UUID::generate();
+	auto it = heads.find(type);
+	if (it == heads.end())
+		heads[type] = { { id, dgst } };
+	else
+		it->second.emplace_back(id, dgst);
+	return id;
+}
+
+bool MemoryStorage::replaceHead(UUID type, UUID id, const Digest & old, const Digest & dgst)
+{
+	auto it = heads.find(type);
+	if (it == heads.end())
+		return false;
+
+	for (auto & x : it->second)
+		if (get<UUID>(x) == id) {
+			if (get<Digest>(x) == old) {
+				get<Digest>(x) = dgst;
+				return true;
+			} else {
+				return false;
+			}
+		}
+
+	return false;
 }
 
 optional<vector<uint8_t>> MemoryStorage::loadKey(const Digest & digest) const
@@ -256,6 +398,42 @@ optional<vector<uint8_t>> ChainStorage::loadBytes(const Digest & digest) const
 void ChainStorage::storeBytes(const Digest & digest, const vector<uint8_t> & content)
 {
 	storage->storeBytes(digest, content);
+}
+
+optional<Digest> ChainStorage::headRef(UUID type, UUID id) const
+{
+	if (auto res = storage->headRef(type, id))
+		return res;
+	if (parent)
+		return parent->headRef(type, id);
+	return nullopt;
+}
+
+vector<tuple<UUID, Digest>> ChainStorage::headRefs(UUID type) const
+{
+	auto res = storage->headRefs(type);
+	if (parent)
+		for (auto x : parent->headRefs(type)) {
+			bool add = true;
+			for (const auto & y : res)
+				if (get<UUID>(y) == get<UUID>(x)) {
+					add = false;
+					break;
+				}
+			if (add)
+				res.push_back(x);
+		}
+	return res;
+}
+
+UUID ChainStorage::storeHead(UUID type, const Digest & dgst)
+{
+	return storage->storeHead(type, dgst);
+}
+
+bool ChainStorage::replaceHead(UUID type, UUID id, const Digest & old, const Digest & dgst)
+{
+	return storage->replaceHead(type, id, old, dgst);
 }
 
 optional<vector<uint8_t>> ChainStorage::loadKey(const Digest & digest) const
@@ -451,6 +629,44 @@ void Storage::storeKey(Ref pubref, const vector<uint8_t> & key) const
 optional<vector<uint8_t>> Storage::loadKey(Ref pubref) const
 {
 	return p->backend->loadKey(pubref.digest());
+}
+
+optional<Ref> Storage::headRef(UUID type, UUID id) const
+{
+	if (auto dgst = p->backend->headRef(type, id))
+		return ref(*dgst);
+	return nullopt;
+}
+
+vector<tuple<UUID, Ref>> Storage::headRefs(UUID type) const
+{
+	vector<tuple<UUID, Ref>> res;
+	for (auto x : p->backend->headRefs(type))
+		if (auto r = ref(get<Digest>(x)))
+			res.emplace_back(get<UUID>(x), *r);
+	return res;
+}
+
+UUID Storage::storeHead(UUID type, const Ref & ref)
+{
+	return ref.storage().p->backend->storeHead(type, ref.digest());
+}
+
+bool Storage::replaceHead(UUID type, UUID id, const Ref & old, const Ref & ref)
+{
+	return ref.storage().p->backend->replaceHead(type, id, old.digest(), ref.digest());
+}
+
+optional<Ref> Storage::updateHead(UUID type, UUID id, const Ref & old, const std::function<Ref(const Ref &)> & f)
+{
+	Ref r = f(old);
+	if (replaceHead(type, id, old, r))
+		return r;
+
+	if (auto cur = old.storage().headRef(type, id))
+		return updateHead(type, id, *cur, f);
+	else
+		return nullopt;
 }
 
 
