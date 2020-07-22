@@ -9,6 +9,7 @@ add_library(erebos
 	network
 	pubkey
 	service
+	state
 	storage
 	time
 	uuid

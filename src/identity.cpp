@@ -11,6 +11,8 @@ using std::nullopt;
 using std::runtime_error;
 using std::set;
 
+const UUID Identity::sharedTypeId { "0c6c1fe0-f2d7-4891-926b-c332449f7871" };
+
 Identity::Identity(const Priv * p): p(p) {}
 Identity::Identity(shared_ptr<const Priv> && p): p(std::move(p)) {}
 
@@ -30,6 +32,15 @@ optional<Identity> Identity::load(const vector<Ref> & refs)
 	if (auto ptr = Priv::validate(data))
 		return Identity(ptr);
 	return nullopt;
+}
+
+vector<Ref> Identity::store(const Storage & st) const
+{
+	vector<Ref> res;
+	res.reserve(p->data.size());
+	for (const auto & x : p->data)
+		res.push_back(x.store(st));
+	return res;
 }
 
 optional<string> Identity::name() const

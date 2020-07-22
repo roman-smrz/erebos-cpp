@@ -7,8 +7,14 @@ namespace erebos {
 class Identity
 {
 public:
+	Identity(const Identity &) = default;
+	Identity(Identity &&) = default;
+	Identity & operator=(const Identity &) = default;
+	Identity & operator=(Identity &&) = default;
+
 	static std::optional<Identity> load(const Ref &);
 	static std::optional<Identity> load(const std::vector<Ref> &);
+	std::vector<Ref> store(const Storage & st) const;
 
 	std::optional<std::string> name() const;
 	std::optional<Identity> owner() const;
@@ -38,9 +44,11 @@ public:
 	static Builder create(const Storage &);
 	Builder modify() const;
 
+	static const UUID sharedTypeId;
+
 private:
 	struct Priv;
-	const std::shared_ptr<const Priv> p;
+	std::shared_ptr<const Priv> p;
 	Identity(const Priv * p);
 	Identity(std::shared_ptr<const Priv> && p);
 };
