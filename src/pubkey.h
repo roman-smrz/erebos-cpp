@@ -38,6 +38,8 @@ public:
 
 	template<class T>
 	Stored<Signed<T>> sign(const Stored<T> &) const;
+	template<class T>
+	Stored<Signed<T>> signAdd(const Stored<Signed<T>> &) const;
 
 private:
 	vector<uint8_t> sign(const Digest &) const;
@@ -87,6 +89,16 @@ Stored<Signed<T>> SecretKey::sign(const Stored<T> & val) const
 	auto st = val.ref().storage();
 	auto sig = st.store(Signature(pub(), sign(val.ref().digest())));
 	return st.store(Signed(val, { sig }));
+}
+
+template<class T>
+Stored<Signed<T>> SecretKey::signAdd(const Stored<Signed<T>> & val) const
+{
+	auto st = val.ref().storage();
+	auto sig = st.store(Signature(pub(), sign(val.ref().digest())));
+	auto sigs = val->sigs;
+	sigs.push_back(st.store(Signature(pub(), sign(val->data.ref().digest()))));
+	return st.store(Signed(val->data, sigs));
 }
 
 template<typename T>

@@ -117,8 +117,18 @@ Identity Identity::Builder::commit() const
 		throw runtime_error("failed to load secret key");
 
 	auto sdata = key->sign(idata);
+	if (idata->owner) {
+		if (auto okey = SecretKey::load((*idata->owner)->data->keyIdentity))
+			sdata = okey->signAdd(sdata);
+		else
+			throw runtime_error("failed to load secret key");
+	}
 
-	return Identity(Identity::Priv::validate({ sdata }));
+	auto p = Identity::Priv::validate({ sdata });
+	if (!p)
+		throw runtime_error("failed to validate committed identity");
+
+	return Identity(std::move(p));
 }
 
 void Identity::Builder::name(const string & val)
