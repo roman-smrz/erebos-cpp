@@ -168,10 +168,13 @@ public:
 	Ref & operator=(const Ref &) = default;
 	Ref & operator=(Ref &&) = default;
 
+	bool operator==(const Ref &) = delete;
+	bool operator!=(const Ref &) = delete;
+
 	static std::optional<Ref> create(Storage, const Digest &);
 	static Ref zcreate(Storage);
 
-	constexpr operator bool() const { return true; }
+	explicit constexpr operator bool() const { return true; }
 	const Object operator*() const;
 	std::unique_ptr<Object> operator->() const;
 
@@ -523,12 +526,12 @@ template<typename T>
 std::optional<Head<T>> Head<T>::update(const std::function<Stored<T>(const Stored<T> &)> & f) const
 {
 	auto res = Storage::updateHead(T::headTypeId, mid, ref(), [&f, this](const Ref & r) {
-		return f(r == ref() ? stored() : Stored<T>::load(r)).ref();
+		return f(r.digest() == ref().digest() ? stored() : Stored<T>::load(r)).ref();
 	});
 
 	if (!res)
 		return std::nullopt;
-	if (*res == ref())
+	if (res->digest() == ref().digest())
 		return *this;
 	return Head<T>(mid, *res);
 }
