@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
@@ -13,6 +14,7 @@
 #include <unistd.h>
 
 using std::holds_alternative;
+using std::runtime_error;
 using std::scoped_lock;
 using std::to_string;
 using std::unique_lock;
@@ -25,6 +27,14 @@ Server::Server(const Identity & self, vector<unique_ptr<Service>> && svcs):
 }
 
 Server::~Server() = default;
+
+Service & Server::svcHelper(const std::type_info & tinfo)
+{
+	for (auto & s : p->services)
+		if (typeid(*s) == tinfo)
+			return *s;
+	throw runtime_error("service not found");
+}
 
 PeerList & Server::peerList() const
 {

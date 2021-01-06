@@ -202,10 +202,10 @@ const Identity & DirectMessageThread::peer() const
 }
 
 
-vector<DirectMessageService::ThreadWatcher> DirectMessageService::Priv::watchers;
-mutex DirectMessageService::Priv::watcherLock;
+DirectMessageService::DirectMessageService():
+	p(new Priv)
+{}
 
-DirectMessageService::DirectMessageService() = default;
 DirectMessageService::~DirectMessageService() = default;
 
 UUID DirectMessageService::uuid() const
@@ -229,14 +229,14 @@ void DirectMessageService::handle(Context & ctx) const
 
 	lock.unlock();
 
-	for (const auto & w : Priv::watchers)
+	for (const auto & w : p->watchers)
 		w(dmt, -1, -1);
 }
 
 void DirectMessageService::onUpdate(ThreadWatcher w)
 {
-	scoped_lock l(Priv::watcherLock);
-	Priv::watchers.push_back(w);
+	scoped_lock l(p->watcherLock);
+	p->watchers.push_back(w);
 }
 
 DirectMessageThread DirectMessageService::thread(const Identity & peer)

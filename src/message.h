@@ -51,8 +51,8 @@ struct DirectMessageThread::Iterator::Priv
 
 struct DirectMessageService::Priv
 {
-	static vector<ThreadWatcher> watchers;
-	static mutex watcherLock;
+	vector<ThreadWatcher> watchers;
+	mutex watcherLock;
 };
 
 }

@@ -4,10 +4,13 @@
 
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 
 namespace erebos {
+
+using std::unique_ptr;
 
 class Identity;
 
@@ -78,13 +81,14 @@ public:
 	void handle(Context &) const override;
 
 	typedef std::function<void(const DirectMessageThread &, ssize_t, ssize_t)> ThreadWatcher;
-	static void onUpdate(ThreadWatcher);
-	static DirectMessageThread thread(const Identity &);
+	void onUpdate(ThreadWatcher);
+	DirectMessageThread thread(const Identity &);
 
-	static DirectMessage send(const Identity &, const Peer &, const std::string &);
+	DirectMessage send(const Identity &, const Peer &, const std::string &);
 
 private:
 	struct Priv;
+	unique_ptr<Priv> p;
 };
 
 }

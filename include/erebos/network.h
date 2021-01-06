@@ -4,6 +4,7 @@
 #include <erebos/service.h>
 
 #include <functional>
+#include <typeinfo>
 
 namespace erebos {
 
@@ -13,13 +14,23 @@ public:
 	Server(const Identity &, std::vector<std::unique_ptr<Service>> &&);
 	~Server();
 
+	template<class S> S & svc();
+
 	class PeerList & peerList() const;
 
 	struct Peer;
 private:
+	Service & svcHelper(const std::type_info &);
+
 	struct Priv;
 	const std::shared_ptr<Priv> p;
 };
+
+template<class S>
+S & Server::svc()
+{
+	return dynamic_cast<S&>(svcHelper(typeid(S)));
+}
 
 class Peer
 {
