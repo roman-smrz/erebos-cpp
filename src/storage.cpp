@@ -660,7 +660,7 @@ bool Storage::replaceHead(UUID type, UUID id, const Ref & old, const Ref & ref)
 optional<Ref> Storage::updateHead(UUID type, UUID id, const Ref & old, const std::function<Ref(const Ref &)> & f)
 {
 	Ref r = f(old);
-	if (replaceHead(type, id, old, r))
+	if (r.digest() == old.digest() || replaceHead(type, id, old, r))
 		return r;
 
 	if (auto cur = old.storage().headRef(type, id))
