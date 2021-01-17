@@ -1,7 +1,7 @@
 #pragma once
 
-#include <erebos/identity.h>
 #include <erebos/service.h>
+#include <erebos/state.h>
 
 #include <functional>
 #include <typeinfo>
@@ -11,7 +11,7 @@ namespace erebos {
 class Server
 {
 public:
-	Server(const Identity &, std::vector<std::unique_ptr<Service>> &&);
+	Server(const Head<LocalState> &, std::vector<std::unique_ptr<Service>> &&);
 	~Server();
 
 	template<class S> S & svc();

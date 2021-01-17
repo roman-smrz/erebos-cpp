@@ -136,13 +136,16 @@ struct WaitingRef
 
 struct Server::Priv
 {
-	Priv(const Identity & self, vector<unique_ptr<Service>> && svcs);
+	Priv(const Head<LocalState> & local, const Identity & self,
+			vector<unique_ptr<Service>> && svcs);
 	~Priv();
 	void doListen();
 	void doAnnounce();
 
 	Peer & getPeer(const sockaddr_in & paddr);
 	void handlePacket(Peer &, const TransportHeader &, ReplyBuilder &);
+
+	void handleLocalHeadChange(const Head<LocalState> &);
 
 	constexpr static uint16_t discoveryPort { 29665 };
 	constexpr static chrono::seconds announceInterval { 60 };
@@ -151,6 +154,7 @@ struct Server::Priv
 	condition_variable announceCondvar;
 	bool finish = false;
 
+	Head<LocalState> localHead;
 	Identity self;
 	vector<unique_ptr<Service>> services;
 

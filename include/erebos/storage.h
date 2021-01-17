@@ -107,6 +107,7 @@ protected:
 	static UUID storeHead(UUID type, const Ref & ref);
 	static bool replaceHead(UUID type, UUID id, const Ref & old, const Ref & ref);
 	static std::optional<Ref> updateHead(UUID type, UUID id, const Ref & old, const std::function<Ref(const Ref &)> &);
+	void watchHead(UUID type, UUID id, const std::function<void(const Ref &)>) const;
 };
 
 class Digest
@@ -482,6 +483,7 @@ public:
 	const Ref & ref() const { return mstored.ref(); }
 
 	std::optional<Head<T>> update(const std::function<Stored<T>(const Stored<T> &)> &) const;
+	void watch(const std::function<void(const Head<T> &)> &) const;
 
 private:
 	UUID mid;
@@ -534,6 +536,14 @@ std::optional<Head<T>> Head<T>::update(const std::function<Stored<T>(const Store
 	if (res->digest() == ref().digest())
 		return *this;
 	return Head<T>(mid, *res);
+}
+
+template<typename T>
+void Head<T>::watch(const std::function<void(const Head<T> &)> & watcher) const
+{
+	stored().ref().storage().watchHead(T::headTypeId, id(), [id = id(), watcher] (const Ref & ref) {
+		watcher(Head<T>(id, ref));
+	});
 }
 
 }

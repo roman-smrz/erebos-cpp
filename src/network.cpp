@@ -21,8 +21,8 @@ using std::unique_lock;
 
 using namespace erebos;
 
-Server::Server(const Identity & self, vector<unique_ptr<Service>> && svcs):
-	p(new Priv(self, std::move(svcs)))
+Server::Server(const Head<LocalState> & head, vector<unique_ptr<Service>> && svcs):
+	p(new Priv(head, *head->identity(), std::move(svcs)))
 {
 }
 
@@ -139,7 +139,9 @@ void PeerList::onUpdate(function<void(size_t, const Peer *)> w)
 }
 
 
-Server::Priv::Priv(const Identity & self, vector<unique_ptr<Service>> && svcs):
+Server::Priv::Priv(const Head<LocalState> & local, const Identity & self,
+		vector<unique_ptr<Service>> && svcs):
+	localHead(local),
 	self(self),
 	services(std::move(svcs))
 {
@@ -176,6 +178,8 @@ Server::Priv::Priv(const Identity & self, vector<unique_ptr<Service>> && svcs):
 
 	threadListen = thread([this] { doListen(); });
 	threadAnnounce = thread([this] { doAnnounce(); });
+
+	local.watch(std::bind(&Priv::handleLocalHeadChange, this, std::placeholders::_1));
 }
 
 Server::Priv::~Priv()
@@ -443,6 +447,23 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 				peer.serviceQueue.emplace_back(*serviceType, wref);
 				wref->check(reply);
 			}
+		}
+	}
+}
+
+void Server::Priv::handleLocalHeadChange(const Head<LocalState> & head)
+{
+	scoped_lock lock(dataMutex);
+	if (auto id = head->identity()) {
+		if (id->ref()->digest() != self.ref()->digest()) {
+			self = *id;
+
+			TransportHeader header({
+				{ TransportHeader::Type::AnnounceSelf, *self.ref() }
+			});
+
+			for (const auto & peer : peers)
+				peer->send(header, { **self.ref() });
 		}
 	}
 }
