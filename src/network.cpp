@@ -189,6 +189,9 @@ Server::Priv::~Priv()
 		finish = true;
 	}
 
+	if (sock >= 0)
+		shutdown(sock, SHUT_RDWR);
+
 	announceCondvar.notify_all();
 	threadListen.join();
 	threadAnnounce.join();
@@ -212,6 +215,8 @@ void Server::Priv::doListen()
 				(sockaddr *) &paddr, &addrlen);
 		if (ret < 0)
 			throw std::system_error(errno, std::generic_category());
+		if (ret == 0)
+			break;
 		buf.resize(ret);
 
 		auto & peer = getPeer(paddr);
