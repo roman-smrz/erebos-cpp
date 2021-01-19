@@ -24,12 +24,14 @@ using std::copy;
 using std::get;
 using std::holds_alternative;
 using std::ifstream;
+using std::invalid_argument;
 using std::is_same_v;
 using std::make_shared;
 using std::make_unique;
 using std::monostate;
 using std::nullopt;
 using std::ofstream;
+using std::out_of_range;
 using std::runtime_error;
 using std::scoped_lock;
 using std::shared_ptr;
@@ -980,12 +982,12 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 	while (begin != end) {
 		const auto colon = std::find(begin, end, ':');
 		if (colon == end)
-			throw runtime_error("invalid record");
+			return nullopt;
 		const string name(begin, colon);
 
 		const auto space = std::find(colon + 1, end, ' ');
 		if (space == end)
-			throw runtime_error("invalid record");
+			return nullopt;
 		const string type(colon + 1, space);
 
 		begin = space + 1;
@@ -993,7 +995,7 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 		for (bool cont = true; cont; ) {
 			auto newline = std::find(begin, end, '\n');
 			if (newline == end)
-				throw runtime_error("invalid record");
+				return nullopt;
 
 			if (newline + 1 != end && *(newline + 1) == '\t')
 				newline++;
@@ -1005,7 +1007,13 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 		}
 
 		if (type == "i")
-			items->emplace_back(name, std::stoi(value));
+			try {
+				items->emplace_back(name, std::stoi(value));
+			} catch (invalid_argument &) {
+				return nullopt;
+			} catch (out_of_range &) {
+				return nullopt; // TODO
+			}
 		else if (type == "t")
 			items->emplace_back(name, value);
 		else if (type == "b")
@@ -1163,7 +1171,15 @@ ObjectT<S>::decodePrefix(const S & st,
 	if (space == newline)
 		return nullopt;
 
-	ssize_t size = std::stoi(string(space + 1, newline));
+	ssize_t size;
+	try {
+		size = std::stol(string(space + 1, newline));
+	} catch (invalid_argument &) {
+		return nullopt;
+	} catch (out_of_range &) {
+		// Way too big to handle anyway
+		return nullopt;
+	}
 	if (end - newline - 1 < size)
 		return nullopt;
 	auto cend = newline + 1 + size;
