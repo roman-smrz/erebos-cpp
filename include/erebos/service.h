@@ -1,5 +1,6 @@
 #pragma once
 
+#include <erebos/state.h>
 #include <erebos/uuid.h>
 
 #include <memory>
@@ -21,6 +22,9 @@ public:
 
 		const class Ref & ref() const;
 		const class Peer & peer() const;
+
+		const Stored<LocalState> & local() const;
+		void local(const LocalState &);
 
 	private:
 		std::unique_ptr<Priv> p;

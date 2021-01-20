@@ -550,16 +550,22 @@ void Server::Peer::updateService(ReplyBuilder & reply)
 	for (auto & x : serviceQueue) {
 		if (auto ref = std::get<1>(x)->check(reply)) {
 			if (lpeer) {
-				Service::Context ctx(new Service::Context::Priv {
-					.ref = *ref,
-					.peer = erebos::Peer(lpeer),
-				});
+				server.localHead.update([&] (const Stored<LocalState> & local) {
+					Service::Context ctx(new Service::Context::Priv {
+						.ref = *ref,
+						.peer = erebos::Peer(lpeer),
+						.local = local,
+					});
 
-				for (auto & svc : server.services)
-					if (svc->uuid() == std::get<UUID>(x)) {
-						svc->handle(ctx);
-						break;
+					for (auto & svc : server.services) {
+						if (svc->uuid() == std::get<UUID>(x)) {
+							svc->handle(ctx);
+							break;
+						}
 					}
+
+					return ctx.local();
+				});
 			}
 		} else {
 			next.push_back(std::move(x));

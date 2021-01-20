@@ -9,6 +9,7 @@ struct Service::Context::Priv
 {
 	Ref ref;
 	Peer peer;
+	Stored<LocalState> local;
 };
 
 }

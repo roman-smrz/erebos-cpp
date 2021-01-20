@@ -23,3 +23,13 @@ const Peer & Service::Context::peer() const
 {
 	return p->peer;
 }
+
+const Stored<LocalState> & Service::Context::local() const
+{
+	return p->local;
+}
+
+void Service::Context::local(const LocalState & ls)
+{
+	p->local = p->local.ref().storage().store(ls);
+}
