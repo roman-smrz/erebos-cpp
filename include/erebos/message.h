@@ -78,7 +78,7 @@ public:
 	virtual ~DirectMessageService();
 
 	UUID uuid() const override;
-	void handle(Context &) const override;
+	void handle(Context &) override;
 
 	typedef std::function<void(const DirectMessageThread &, ssize_t, ssize_t)> ThreadWatcher;
 	void onUpdate(ThreadWatcher);

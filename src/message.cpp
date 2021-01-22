@@ -213,7 +213,7 @@ UUID DirectMessageService::uuid() const
 	return myUUID;
 }
 
-void DirectMessageService::handle(Context & ctx) const
+void DirectMessageService::handle(Context & ctx)
 {
 	auto pid = ctx.peer().identity();
 	if (!pid)
