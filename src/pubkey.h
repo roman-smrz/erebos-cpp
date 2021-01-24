@@ -34,6 +34,9 @@ public:
 	static SecretKey generate(const Storage & st);
 	static optional<SecretKey> load(const Stored<PublicKey> & st);
 
+	static optional<SecretKey> fromData(const Stored<PublicKey> &, const vector<uint8_t> &);
+	vector<uint8_t> getData() const;
+
 	Stored<PublicKey> pub() const { return pub_; }
 
 	template<class T>

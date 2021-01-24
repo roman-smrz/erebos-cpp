@@ -26,7 +26,22 @@ Server::Server(const Head<LocalState> & head, vector<unique_ptr<Service>> && svc
 {
 }
 
+Server:: Server(const std::shared_ptr<Priv> & ptr):
+	p(ptr)
+{
+}
+
 Server::~Server() = default;
+
+const Head<LocalState> & Server::localHead() const
+{
+	return p->localHead;
+}
+
+const Identity & Server::identity() const
+{
+	return p->self;
+}
 
 Service & Server::svcHelper(const std::type_info & tinfo)
 {
@@ -44,6 +59,27 @@ PeerList & Server::peerList() const
 
 Peer::Peer(const shared_ptr<Priv> & p): p(p) {}
 Peer::~Peer() = default;
+
+Server Peer::server() const
+{
+	if (auto speer = p->speer.lock())
+		return Server(speer->server.getptr());
+	throw runtime_error("Server no longer running");
+}
+
+const Storage & Peer::tempStorage() const
+{
+	if (auto speer = p->speer.lock())
+		return speer->tempStorage;
+	throw runtime_error("Server no longer running");
+}
+
+const PartialStorage & Peer::partialStorage() const
+{
+	if (auto speer = p->speer.lock())
+		return speer->partStorage;
+	throw runtime_error("Server no longer running");
+}
 
 string Peer::name() const
 {
@@ -88,18 +124,40 @@ bool Peer::hasChannel() const
 
 bool Peer::send(UUID uuid, const Ref & ref) const
 {
+	return send(uuid, ref, *ref);
+}
+
+bool Peer::send(UUID uuid, const Object & obj) const
+{
+	if (auto speer = p->speer.lock()) {
+		auto ref = speer->tempStorage.storeObject(obj);
+		return send(uuid, ref, obj);
+	}
+
+	return false;
+}
+
+bool Peer::send(UUID uuid, const Ref & ref, const Object & obj) const
+{
 	if (hasChannel())
 		if (auto speer = p->speer.lock()) {
 			TransportHeader header({
 				{ TransportHeader::Type::ServiceType, uuid },
 					{ TransportHeader::Type::ServiceRef, ref },
 			});
-			speer->send(header, { *ref });
+			speer->send(header, { obj });
 			return true;
 		}
 
 	return false;
 }
+
+bool Peer::operator==(const Peer & other) const { return p == other.p; }
+bool Peer::operator!=(const Peer & other) const { return p != other.p; }
+bool Peer::operator<(const Peer & other) const { return p < other.p; }
+bool Peer::operator<=(const Peer & other) const { return p <= other.p; }
+bool Peer::operator>(const Peer & other) const { return p > other.p; }
+bool Peer::operator>=(const Peer & other) const { return p >= other.p; }
 
 
 PeerList::PeerList(): p(new Priv) {}
@@ -198,6 +256,11 @@ Server::Priv::~Priv()
 
 	if (sock >= 0)
 		close(sock);
+}
+
+shared_ptr<Server::Priv> Server::Priv::getptr()
+{
+	return shared_from_this();
 }
 
 void Server::Priv::doListen()

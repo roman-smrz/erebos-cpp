@@ -123,6 +123,9 @@ public:
 	explicit operator std::string() const;
 	bool isZero() const;
 
+	static Digest of(const std::vector<uint8_t> & content);
+	template<class S> static Digest of(const ObjectT<S> &);
+
 	const std::array<uint8_t, size> & arr() const { return value; }
 
 	bool operator==(const Digest & other) const { return value == other.value; }
@@ -135,6 +138,12 @@ public:
 private:
 	std::array<uint8_t, size> value;
 };
+
+template<class S>
+Digest Digest::of(const ObjectT<S> & obj)
+{
+	return Digest::of(obj.encode());
+}
 
 class PartialRef
 {

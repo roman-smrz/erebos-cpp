@@ -613,13 +613,7 @@ Ref Storage::zref() const
 
 Digest PartialStorage::Priv::storeBytes(const vector<uint8_t> & content) const
 {
-	array<uint8_t, Digest::size> arr;
-	int ret = blake2b(arr.data(), content.data(), nullptr,
-			Digest::size, content.size(), 0);
-	if (ret != 0)
-		throw runtime_error("failed to compute digest");
-
-	Digest digest(arr);
+	Digest digest = Digest::of(content);
 	backend->storeBytes(digest, content);
 	return digest;
 }
@@ -631,10 +625,7 @@ optional<vector<uint8_t>> PartialStorage::Priv::loadBytes(const Digest & digest)
 		return nullopt;
 	auto content = ocontent.value();
 
-	array<uint8_t, Digest::size> arr;
-	int ret = blake2b(arr.data(), content.data(), nullptr,
-			Digest::size, content.size(), 0);
-	if (ret != 0 || digest != Digest(arr))
+	if (digest != Digest::of(content))
 		throw runtime_error("digest verification failed");
 
 	return content;
@@ -818,6 +809,17 @@ bool Digest::isZero() const
 	for (uint8_t x : value)
 		if (x) return false;
 	return true;
+}
+
+Digest Digest::of(const vector<uint8_t> & content)
+{
+	array<uint8_t, size> arr;
+	int ret = blake2b(arr.data(), content.data(), nullptr,
+			size, content.size(), 0);
+	if (ret != 0)
+		throw runtime_error("failed to compute digest");
+
+	return Digest(arr);
 }
 
 

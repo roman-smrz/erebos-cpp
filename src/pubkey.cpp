@@ -88,6 +88,45 @@ optional<SecretKey> SecretKey::load(const Stored<PublicKey> & pub)
 	return SecretKey(key, pub);
 }
 
+optional<SecretKey> SecretKey::fromData(const Stored<PublicKey> & pub, const vector<uint8_t> & sdata)
+{
+	shared_ptr<EVP_PKEY> pkey(
+			EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL,
+				sdata.data(), sdata.size()),
+			EVP_PKEY_free);
+	if (!pkey)
+		return nullopt;
+
+	vector<uint8_t> keyData;
+	size_t keyLen;
+
+	EVP_PKEY_get_raw_public_key(pkey.get(), nullptr, &keyLen);
+	keyData.resize(keyLen);
+	EVP_PKEY_get_raw_public_key(pkey.get(), keyData.data(), &keyLen);
+
+	EVP_PKEY_get_raw_public_key(pub->key.get(), nullptr, &keyLen);
+	keyData.resize(keyLen);
+	EVP_PKEY_get_raw_public_key(pub->key.get(), keyData.data(), &keyLen);
+
+	if (EVP_PKEY_cmp(pkey.get(), pub->key.get()) != 1)
+		return nullopt;
+
+	pub.ref().storage().storeKey(pub.ref(), sdata);
+	return SecretKey(std::move(pkey), pub);
+}
+
+vector<uint8_t> SecretKey::getData() const
+{
+	vector<uint8_t> keyData;
+	size_t keyLen;
+
+	EVP_PKEY_get_raw_private_key(key.get(), nullptr, &keyLen);
+	keyData.resize(keyLen);
+	EVP_PKEY_get_raw_private_key(key.get(), keyData.data(), &keyLen);
+
+	return keyData;
+}
+
 vector<uint8_t> SecretKey::sign(const Digest & dgst) const
 {
 	unique_ptr<EVP_MD_CTX, void(*)(EVP_MD_CTX*)>

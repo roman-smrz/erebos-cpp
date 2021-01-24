@@ -10,10 +10,15 @@ namespace erebos {
 
 class Server
 {
+	struct Priv;
 public:
 	Server(const Head<LocalState> &, std::vector<std::unique_ptr<Service>> &&);
+	Server(const std::shared_ptr<Priv> &);
 	~Server();
 
+	const Head<LocalState> & localHead() const;
+
+	const Identity & identity() const;
 	template<class S> S & svc();
 
 	class PeerList & peerList() const;
@@ -22,7 +27,6 @@ public:
 private:
 	Service & svcHelper(const std::type_info &);
 
-	struct Priv;
 	const std::shared_ptr<Priv> p;
 };
 
@@ -39,13 +43,27 @@ public:
 	Peer(const std::shared_ptr<Priv> & p);
 	~Peer();
 
+	Server server() const;
+
+	const Storage & tempStorage() const;
+	const PartialStorage & partialStorage() const;
+
 	std::string name() const;
 	std::optional<Identity> identity() const;
 
 	bool hasChannel() const;
 	bool send(UUID, const Ref &) const;
+	bool send(UUID, const Object &) const;
+
+	bool operator==(const Peer & other) const;
+	bool operator!=(const Peer & other) const;
+	bool operator<(const Peer & other) const;
+	bool operator<=(const Peer & other) const;
+	bool operator>(const Peer & other) const;
+	bool operator>=(const Peer & other) const;
 
 private:
+	bool send(UUID, const Ref &, const Object &) const;
 	std::shared_ptr<Priv> p;
 };
 

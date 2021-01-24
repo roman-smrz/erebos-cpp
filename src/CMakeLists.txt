@@ -3,10 +3,12 @@ include_directories(
 )
 
 add_library(erebos
+	attach
 	channel
 	identity
 	message
 	network
+	pairing
 	pubkey
 	service
 	state

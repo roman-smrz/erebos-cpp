@@ -60,6 +60,11 @@ const Identity & Identity::finalOwner() const
 	return *this;
 }
 
+Stored<PublicKey> Identity::keyIdentity() const
+{
+	return p->data[0]->data->keyIdentity;
+}
+
 Stored<PublicKey> Identity::keyMessage() const
 {
 	return p->keyMessage;

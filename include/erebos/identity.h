@@ -20,6 +20,7 @@ public:
 	std::optional<Identity> owner() const;
 	const Identity & finalOwner() const;
 
+	Stored<class PublicKey> keyIdentity() const;
 	Stored<class PublicKey> keyMessage() const;
 
 	bool sameAs(const Identity &) const;
