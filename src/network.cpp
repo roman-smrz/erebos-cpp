@@ -398,7 +398,8 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 
 		case TransportHeader::Type::DataRequest: {
 			auto pref = std::get<PartialRef>(item.value);
-			if (plaintextRefs.find(pref.digest()) != plaintextRefs.end()) {
+			if (holds_alternative<Stored<Channel>>(peer.channel) ||
+					plaintextRefs.find(pref.digest()) != plaintextRefs.end()) {
 				if (auto ref = peer.tempStorage.ref(pref.digest())) {
 					TransportHeader::Item hitem { TransportHeader::Type::DataResponse, *ref };
 					reply.header({ TransportHeader::Type::DataResponse, *ref });
