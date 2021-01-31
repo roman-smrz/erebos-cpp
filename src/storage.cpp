@@ -41,11 +41,7 @@ using std::to_string;
 FilesystemStorage::FilesystemStorage(const fs::path & path):
 	root(path)
 {
-	if (!fs::is_directory(path))
-		fs::create_directory(path);
-
-	if (!fs::is_directory(path/"objects"))
-		fs::create_directory(path/"objects");
+	fs::create_directories(path/"blake2"/"objects");
 
 	if (!fs::is_directory(path/"heads"))
 		fs::create_directory(path/"heads");
@@ -358,9 +354,12 @@ void FilesystemStorage::inotifyWatch()
 fs::path FilesystemStorage::objectPath(const Digest & digest) const
 {
 	string name(digest);
+	size_t delim = name.find('#');
+
 	return root/"objects"/
-		fs::path(name.begin(), name.begin() + 2)/
-		fs::path(name.begin() + 2, name.end());
+		fs::path(name.begin(), name.begin() + delim)/
+		fs::path(name.begin() + delim + 1, name.begin() + delim + 3)/
+		fs::path(name.begin() + delim + 3, name.end());
 }
 
 fs::path FilesystemStorage::headPath(UUID type) const
@@ -784,21 +783,25 @@ void Storage::watchHead(UUID type, UUID wid, const std::function<void(const Ref 
 
 Digest::Digest(const string & str)
 {
-	if (str.size() != 2 * size)
+	if (str.size() != 2 * size + 7)
+		throw runtime_error("invalid ref digest");
+
+	if (strncmp(str.data(), "blake2#", 7) != 0)
 		throw runtime_error("invalid ref digest");
 
 	for (size_t i = 0; i < size; i++)
-		std::from_chars(str.data() + 2 * i,
-				str.data() + 2 * i + 2,
+		std::from_chars(str.data() + 7 + 2 * i,
+				str.data() + 7 + 2 * i + 2,
 				value[i], 16);
 }
 
 Digest::operator string() const
 {
-	string res(size * 2, '0');
+	string res(size * 2 + 7, '0');
+	memcpy(res.data(), "blake2#", 7);
 	for (size_t i = 0; i < size; i++)
-		std::to_chars(res.data() + 2 * i + (value[i] < 0x10),
-				res.data() + 2 * i + 2,
+		std::to_chars(res.data() + 7 + 2 * i + (value[i] < 0x10),
+				res.data() + 7 + 2 * i + 2,
 				value[i], 16);
 	return res;
 }
@@ -1031,7 +1034,7 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 			items->emplace_back(name, ZonedTime(value));
 		else if (type == "u")
 			items->emplace_back(name, UUID(value));
-		else if (type == "r.b2") {
+		else if (type == "r") {
 			if constexpr (is_same_v<S, Storage>) {
 				if (auto ref = st.ref(Digest(value)))
 					items->emplace_back(name, ref.value());
@@ -1119,7 +1122,7 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 			type = "u";
 			value = string(*x);
 		} else if (auto x = item.asRef()) {
-			type = "r.b2";
+			type = "r";
 			value = string(x->digest());
 		} else if (auto x = item.asUnknown()) {
 			type = x->type;
