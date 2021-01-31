@@ -1,5 +1,4 @@
 #include "storage.h"
-#include "base64.h"
 
 #include <charconv>
 #include <chrono>
@@ -1018,9 +1017,17 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 			}
 		else if (type == "t")
 			items->emplace_back(name, value);
-		else if (type == "b")
-			items->emplace_back(name, base64::decode(value));
-		else if (type == "d")
+		else if (type == "b") {
+			if (value.size() % 2)
+				return nullopt;
+			vector<uint8_t> binary(value.size() / 2, 0);
+
+			for (size_t i = 0; i < binary.size(); i++)
+				std::from_chars(value.data() + 2 * i,
+						value.data() + 2 * i + 2,
+						binary[i], 16);
+			items->emplace_back(name, std::move(binary));
+		} else if (type == "d")
 			items->emplace_back(name, ZonedTime(value));
 		else if (type == "u")
 			items->emplace_back(name, UUID(value));
@@ -1100,7 +1107,11 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 			value = *x;
 		} else if (auto x = item.asBinary()) {
 			type = "b";
-			value = base64::encode(*x);
+			value.resize(x->size() * 2, '0');
+			for (size_t i = 0; i < x->size(); i++)
+				std::to_chars(value.data() + 2 * i + ((*x)[i] < 0x10),
+						value.data() + 2 * i + 2,
+						(*x)[i], 16);
 		} else if (auto x = item.asDate()) {
 			type = "d";
 			value = string(*x);
