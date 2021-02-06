@@ -177,7 +177,7 @@ Ref IdentityData::store(const Storage & st) const
 {
 	vector<Record::Item> items;
 
-	for (const auto p : prev)
+	for (const auto & p : prev)
 		items.emplace_back("SPREV", p.ref());
 	if (name)
 		items.emplace_back("name", *name);

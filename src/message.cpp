@@ -73,7 +73,7 @@ Ref DirectMessageData::store(const Storage & st) const
 {
 	vector<Record::Item> items;
 
-	for (const auto prev : prev)
+	for (const auto & prev : prev)
 		items.emplace_back("PREV", prev.ref());
 	if (from)
 		items.emplace_back("from", from->ref().value());

@@ -14,7 +14,7 @@ Ref ChannelRequestData::store(const Storage & st) const
 {
 	vector<Record::Item> items;
 
-	for (const auto p : peers)
+	for (const auto & p : peers)
 		items.emplace_back("peer", p);
 	items.emplace_back("enc", "aes-128-gcm");
 	items.emplace_back("key", key);
@@ -94,7 +94,7 @@ Ref Channel::store(const Storage & st) const
 {
 	vector<Record::Item> items;
 
-	for (const auto p : peers)
+	for (const auto & p : peers)
 		items.emplace_back("peer", p);
 	items.emplace_back("enc", "aes-128-gcm");
 	items.emplace_back("key", key);
