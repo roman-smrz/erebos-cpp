@@ -45,9 +45,11 @@ const Identity & Server::identity() const
 
 Service & Server::svcHelper(const std::type_info & tinfo)
 {
-	for (auto & s : p->services)
-		if (typeid(*s) == tinfo)
-			return *s;
+	for (auto & s : p->services) {
+		auto & sobj = *s;
+		if (typeid(sobj) == tinfo)
+			return sobj;
+	}
 	throw runtime_error("service not found");
 }
 
