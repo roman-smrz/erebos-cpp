@@ -41,10 +41,6 @@ using std::to_string;
 FilesystemStorage::FilesystemStorage(const fs::path & path):
 	root(path)
 {
-	fs::create_directories(path/"blake2"/"objects");
-
-	if (!fs::is_directory(path/"heads"))
-		fs::create_directory(path/"heads");
 }
 
 FilesystemStorage::~FilesystemStorage()
