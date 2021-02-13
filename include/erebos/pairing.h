@@ -17,6 +17,7 @@ using std::function;
 using std::future;
 using std::map;
 using std::mutex;
+using std::promise;
 using std::string;
 using std::variant;
 using std::vector;
@@ -31,7 +32,7 @@ public:
 	typedef function<void(const Peer &)> RequestInitHook;
 	void onRequestInit(RequestInitHook);
 
-	typedef function<future<bool>(const Peer &, string)> ConfirmHook;
+	typedef function<future<bool>(const Peer &, string, future<bool> &&)> ConfirmHook;
 	void onResponse(ConfirmHook);
 	void onRequest(ConfirmHook);
 
@@ -72,6 +73,7 @@ private:
 		StatePhase phase;
 		vector<uint8_t> nonce;
 		vector<uint8_t> peerCheck;
+		promise<bool> success;
 	};
 
 	map<Peer, State> peerStates;

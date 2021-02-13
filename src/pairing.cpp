@@ -98,7 +98,10 @@ void PairingServiceBase::handle(Context & ctx)
 		if (check != state.peerCheck) {
 			if (requestNonceFailedHook)
 				requestNonceFailedHook(ctx.peer());
-			state.phase = StatePhase::PairingFailed;
+			if (state.phase < StatePhase::PairingDone) {
+				state.phase = StatePhase::PairingFailed;
+				state.success.set_value(false);
+			}
 			return;
 		}
 
@@ -113,10 +116,18 @@ void PairingServiceBase::handle(Context & ctx)
 		state.phase = StatePhase::PeerRequestConfirm;
 	}
 
+	else if (auto decline = rec->item("decline").asText()) {
+		if (state.phase < StatePhase::PairingDone) {
+			state.phase = StatePhase::PairingFailed;
+			state.success.set_value(false);
+		}
+	}
+
 	else {
 		if (state.phase == StatePhase::OurRequestReady) {
 			handlePairingResult(ctx);
 			state.phase = StatePhase::PairingDone;
+			state.success.set_value(true);
 		} else {
 			result = ctx.ref();
 		}
@@ -171,6 +182,7 @@ string PairingServiceBase::confirmationNumber(const vector<uint8_t> & digest)
 void PairingServiceBase::waitForConfirmation(Peer peer, string confirm)
 {
 	ConfirmHook hook;
+	future<bool> success;
 	{
 		lock_guard lock(stateLock);
 		auto & state = peerStates.try_emplace(peer, State()).first->second;
@@ -178,9 +190,11 @@ void PairingServiceBase::waitForConfirmation(Peer peer, string confirm)
 			hook = responseHook;
 		if (state.phase == StatePhase::PeerRequestConfirm)
 			hook = requestHook;
+
+		success = state.success.get_future();
 	}
 
-	bool ok = hook(peer, confirm).get();
+	bool ok = hook(peer, confirm, std::move(success)).get();
 
 	lock_guard lock(stateLock);
 	auto & state = peerStates.try_emplace(peer, State()).first->second;
@@ -191,22 +205,28 @@ void PairingServiceBase::waitForConfirmation(Peer peer, string confirm)
 				peer.server().localHead().update([&] (const Stored<LocalState> & local) {
 					Service::Context ctx(new Service::Context::Priv {
 						.ref = *result,
-							.peer = peer,
-							.local = local,
+						.peer = peer,
+						.local = local,
 					});
 
 					handlePairingResult(ctx);
 					return ctx.local();
 				});
 				state.phase = StatePhase::PairingDone;
+				state.success.set_value(true);
 			} else {
 				state.phase = StatePhase::OurRequestReady;
 			}
 		} else if (state.phase == StatePhase::PeerRequestConfirm) {
 			peer.send(uuid(), handlePairingCompleteRef(peer));
 			state.phase = StatePhase::PairingDone;
+			state.success.set_value(true);
 		}
 	} else {
-		state.phase = StatePhase::PairingFailed;
+		if (state.phase != StatePhase::PairingFailed) {
+			peer.send(uuid(), Object(Record({{ "decline", string() }})));
+			state.phase = StatePhase::PairingFailed;
+			state.success.set_value(false);
+		}
 	}
 }
