@@ -484,9 +484,6 @@ public:
 	const T & operator*() const { return *mstored; }
 	const T * operator->() const { return &(*mstored); }
 
-	std::vector<Stored<T>> previous() const;
-	bool precedes(const Stored<T> &) const;
-
 	UUID id() const { return mid; }
 	const Stored<T> & stored() const { return mstored; }
 	const Ref & ref() const { return mstored.ref(); }
