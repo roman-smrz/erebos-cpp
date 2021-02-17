@@ -157,8 +157,8 @@ struct Server::Priv : enable_shared_from_this<Server::Priv>
 	condition_variable announceCondvar;
 	bool finish = false;
 
-	Head<LocalState> localHead;
 	Identity self;
+	WatchedHead<LocalState> localHead;
 	vector<unique_ptr<Service>> services;
 
 	thread threadListen;

@@ -11,6 +11,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
@@ -99,6 +100,7 @@ public:
 
 protected:
 	template<typename T> friend class Head;
+	template<typename T> friend class WatchedHead;
 
 	Storage(const std::shared_ptr<const Priv> p): PartialStorage(p) {}
 
@@ -107,7 +109,8 @@ protected:
 	static UUID storeHead(UUID type, const Ref & ref);
 	static bool replaceHead(UUID type, UUID id, const Ref & old, const Ref & ref);
 	static std::optional<Ref> updateHead(UUID type, UUID id, const Ref & old, const std::function<Ref(const Ref &)> &);
-	void watchHead(UUID type, UUID id, const std::function<void(const Ref &)>) const;
+	int watchHead(UUID type, UUID id, const std::function<void(const Ref &)>) const;
+	void unwatchHead(UUID type, UUID id, int watchId) const;
 };
 
 class Digest
@@ -472,6 +475,8 @@ void filterAncestors(std::vector<Stored<T>> & xs)
 	}
 }
 
+template<class T> class WatchedHead;
+
 template<class T>
 class Head
 {
@@ -489,11 +494,32 @@ public:
 	const Ref & ref() const { return mstored.ref(); }
 
 	std::optional<Head<T>> update(const std::function<Stored<T>(const Stored<T> &)> &) const;
-	void watch(const std::function<void(const Head<T> &)> &) const;
+	WatchedHead<T> watch(const std::function<void(const Head<T> &)> &) const;
 
 private:
 	UUID mid;
 	Stored<T> mstored;
+};
+
+template<class T>
+class WatchedHead : public Head<T>
+{
+	friend class Head<T>;
+	WatchedHead(const Head<T> & h, int watcherId):
+		Head<T>(h), watcherId(watcherId) {}
+	WatchedHead(WatchedHead<T> && h):
+		Head<T>(h), watcherId(h.watcherId)
+	{ h.watcherId = -1; }
+	int watcherId;
+
+public:
+	WatchedHead<T> & operator=(const Head<T> & h) {
+		if (Head<T>::id() != h.id())
+			throw std::runtime_error("WatchedHead ID mismatch");
+		static_cast<Head<T> &>(*this) = h;
+		return *this;
+	}
+	~WatchedHead();
 };
 
 template<typename T>
@@ -545,11 +571,20 @@ std::optional<Head<T>> Head<T>::update(const std::function<Stored<T>(const Store
 }
 
 template<typename T>
-void Head<T>::watch(const std::function<void(const Head<T> &)> & watcher) const
+WatchedHead<T> Head<T>::watch(const std::function<void(const Head<T> &)> & watcher) const
 {
-	stored().ref().storage().watchHead(T::headTypeId, id(), [id = id(), watcher] (const Ref & ref) {
+	int wid = stored().ref().storage().watchHead(T::headTypeId, id(), [id = id(), watcher] (const Ref & ref) {
 		watcher(Head<T>(id, ref));
 	});
+	return WatchedHead<T>(*this, wid);
+}
+
+template<class T>
+WatchedHead<T>::~WatchedHead()
+{
+	if (watcherId >= 0)
+		Head<T>::stored().ref().storage().unwatchHead(
+				T::headTypeId, Head<T>::id(), watcherId);
 }
 
 }

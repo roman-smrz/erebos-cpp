@@ -253,10 +253,10 @@ bool FilesystemStorage::replaceHead(UUID type, UUID id, const Digest & old, cons
 	return true;
 }
 
-void FilesystemStorage::watchHead(UUID type, const function<void(UUID id, const Digest &)> & watcher)
+int FilesystemStorage::watchHead(UUID type, const function<void(UUID id, const Digest &)> & watcher)
 {
 	scoped_lock lock(watcherLock);
-	watchers.emplace(type, watcher);
+	int wid = nextWatcherId++;
 
 	if (inotify < 0) {
 		inotify = inotify_init();
@@ -270,10 +270,43 @@ void FilesystemStorage::watchHead(UUID type, const function<void(UUID id, const 
 		watcherThread = std::thread(&FilesystemStorage::inotifyWatch, this);
 	}
 
-	int fd = inotify_add_watch(inotify, headPath(type).c_str(), IN_MOVED_TO);
-	if (fd < 0)
-		throw system_error(errno, std::generic_category());
-	watchMap[fd] = type;
+	if (watchers.find(type) == watchers.end()) {
+		int wd = inotify_add_watch(inotify, headPath(type).c_str(), IN_MOVED_TO);
+		if (wd < 0)
+			throw system_error(errno, std::generic_category());
+
+		watchMap[wd] = type;
+	}
+	watchers.emplace(type, tuple(wid, watcher));
+
+	return wid;
+}
+
+void FilesystemStorage::unwatchHead(UUID type, int wid)
+{
+	scoped_lock lock(watcherLock);
+
+	if (inotify < 0)
+		return;
+
+	auto range = watchers.equal_range(type);
+	for (auto it = range.first; it != range.second; it++) {
+		if (std::get<0>(it->second) == wid) {
+			watchers.erase(it);
+			break;
+		}
+	}
+
+	if (watchers.find(type) == watchers.end()) {
+		for (auto it = watchMap.begin(); it != watchMap.end(); it++) {
+			if (it->second == type) {
+				if (inotify_rm_watch(inotify, it->first) < 0)
+					throw system_error(errno, std::generic_category());
+				watchMap.erase(it);
+				break;
+			}
+		}
+	}
 }
 
 optional<vector<uint8_t>> FilesystemStorage::loadKey(const Digest & pubref) const
@@ -333,13 +366,13 @@ void FilesystemStorage::inotifyWatch()
 			event = (const struct inotify_event *) ptr;
 
 			if (event->mask & IN_MOVED_TO) {
+				scoped_lock lock(watcherLock);
 				UUID type = watchMap[event->wd];
 				if (auto mbid = UUID::fromString(event->name)) {
 					if (auto mbref = headRef(type, *mbid)) {
-						scoped_lock lock(watcherLock);
 						auto range = watchers.equal_range(type);
 						for (auto it = range.first; it != range.second; it++)
-							it->second(*mbid, *mbref);
+							std::get<1>(it->second)(*mbid, *mbref);
 					}
 				}
 			}
@@ -462,10 +495,25 @@ bool MemoryStorage::replaceHead(UUID type, UUID id, const Digest & old, const Di
 	return false;
 }
 
-void MemoryStorage::watchHead(UUID type, const function<void(UUID id, const Digest &)> & watcher)
+int MemoryStorage::watchHead(UUID type, const function<void(UUID id, const Digest &)> & watcher)
 {
 	scoped_lock lock(watcherLock);
-	watchers.emplace(type, watcher);
+	int wid = nextWatcherId++;
+	watchers.emplace(type, tuple(wid, watcher));
+	return wid;
+}
+
+void MemoryStorage::unwatchHead(UUID type, int wid)
+{
+	scoped_lock lock(watcherLock);
+
+	auto range = watchers.equal_range(type);
+	for (auto it = range.first; it != range.second; it++) {
+		if (std::get<0>(it->second) == wid) {
+			watchers.erase(it);
+			break;
+		}
+	}
 }
 
 optional<vector<uint8_t>> MemoryStorage::loadKey(const Digest & digest) const
@@ -537,10 +585,25 @@ bool ChainStorage::replaceHead(UUID type, UUID id, const Digest & old, const Dig
 	return storage->replaceHead(type, id, old, dgst);
 }
 
-void ChainStorage::watchHead(UUID type, const function<void(UUID id, const Digest &)> & watcher)
+int ChainStorage::watchHead(UUID type, const function<void(UUID id, const Digest &)> & watcher)
 {
-	parent->watchHead(type, watcher);
-	storage->watchHead(type, watcher);
+	scoped_lock lock(watcherLock);
+	int wid = nextWatcherId++;
+
+	int id1 = parent->watchHead(type, watcher);
+	int id2 = storage->watchHead(type, watcher);
+	watchers.emplace(wid, tuple(id1, id2));
+
+	return wid;
+}
+
+void ChainStorage::unwatchHead(UUID type, int wid)
+{
+	scoped_lock lock(watcherLock);
+
+	auto [id1, id2] = watchers.extract(wid).mapped();
+	parent->unwatchHead(type, id1);
+	storage->unwatchHead(type, id2);
 }
 
 optional<vector<uint8_t>> ChainStorage::loadKey(const Digest & digest) const
@@ -767,13 +830,18 @@ optional<Ref> Storage::updateHead(UUID type, UUID id, const Ref & old, const std
 		return nullopt;
 }
 
-void Storage::watchHead(UUID type, UUID wid, const std::function<void(const Ref &)> watcher) const
+int Storage::watchHead(UUID type, UUID wid, const std::function<void(const Ref &)> watcher) const
 {
-	p->backend->watchHead(type, [this, wid, watcher] (UUID id, const Digest & dgst) {
+	return p->backend->watchHead(type, [this, wid, watcher] (UUID id, const Digest & dgst) {
 		if (id == wid)
 			if (auto r = ref(dgst))
 				watcher(*r);
 	});
+}
+
+void Storage::unwatchHead(UUID type, UUID, int wid) const
+{
+	p->backend->unwatchHead(type, wid);
 }
 
 

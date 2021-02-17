@@ -201,8 +201,9 @@ void PeerList::onUpdate(function<void(size_t, const Peer *)> w)
 
 Server::Priv::Priv(const Head<LocalState> & local, const Identity & self,
 		vector<unique_ptr<Service>> && svcs):
-	localHead(local),
 	self(self),
+	// Watching needs to start after self is initialized
+	localHead(local.watch(std::bind(&Priv::handleLocalHeadChange, this, std::placeholders::_1))),
 	services(std::move(svcs))
 {
 	struct ifaddrs * raddrs;
@@ -238,8 +239,6 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self,
 
 	threadListen = thread([this] { doListen(); });
 	threadAnnounce = thread([this] { doAnnounce(); });
-
-	local.watch(std::bind(&Priv::handleLocalHeadChange, this, std::placeholders::_1));
 }
 
 Server::Priv::~Priv()
