@@ -60,7 +60,7 @@ protected:
 	friend erebos::PartialRef;
 	struct Priv;
 	const std::shared_ptr<const Priv> p;
-	PartialStorage(const std::shared_ptr<const Priv> p): p(p) {}
+	PartialStorage(const std::shared_ptr<const Priv> & p): p(p) {}
 };
 
 class Storage : public PartialStorage
@@ -102,7 +102,7 @@ protected:
 	template<typename T> friend class Head;
 	template<typename T> friend class WatchedHead;
 
-	Storage(const std::shared_ptr<const Priv> p): PartialStorage(p) {}
+	Storage(const std::shared_ptr<const Priv> & p): PartialStorage(p) {}
 
 	std::optional<Ref> headRef(UUID type, UUID id) const;
 	std::vector<std::tuple<UUID, Ref>> headRefs(UUID type) const;
@@ -156,7 +156,7 @@ public:
 	PartialRef & operator=(const PartialRef &) = default;
 	PartialRef & operator=(PartialRef &&) = default;
 
-	static PartialRef create(PartialStorage, const Digest &);
+	static PartialRef create(const PartialStorage &, const Digest &);
 
 	const Digest & digest() const;
 
@@ -184,8 +184,8 @@ public:
 	bool operator==(const Ref &) = delete;
 	bool operator!=(const Ref &) = delete;
 
-	static std::optional<Ref> create(Storage, const Digest &);
-	static Ref zcreate(Storage);
+	static std::optional<Ref> create(const Storage &, const Digest &);
+	static Ref zcreate(const Storage &);
 
 	explicit constexpr operator bool() const { return true; }
 	const Object operator*() const;

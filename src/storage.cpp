@@ -37,6 +37,7 @@ using std::shared_ptr;
 using std::string;
 using std::system_error;
 using std::to_string;
+using std::weak_ptr;
 
 FilesystemStorage::FilesystemStorage(const fs::path & path):
 	root(path)
@@ -832,10 +833,11 @@ optional<Ref> Storage::updateHead(UUID type, UUID id, const Ref & old, const std
 
 int Storage::watchHead(UUID type, UUID wid, const std::function<void(const Ref &)> watcher) const
 {
-	return p->backend->watchHead(type, [this, wid, watcher] (UUID id, const Digest & dgst) {
+	return p->backend->watchHead(type, [wp = weak_ptr<const Priv>(p), wid, watcher] (UUID id, const Digest & dgst) {
 		if (id == wid)
-			if (auto r = ref(dgst))
-				watcher(*r);
+			if (auto p = wp.lock())
+				if (auto r = Ref::create(Storage(p), dgst))
+					watcher(*r);
 	});
 }
 
@@ -889,7 +891,7 @@ Digest Digest::of(const vector<uint8_t> & content)
 }
 
 
-PartialRef PartialRef::create(PartialStorage st, const Digest & digest)
+PartialRef PartialRef::create(const PartialStorage & st, const Digest & digest)
 {
 	auto p = new Priv {
 		.storage = make_unique<PartialStorage>(st),
@@ -926,7 +928,7 @@ const PartialStorage & PartialRef::storage() const
 	return *p->storage;
 }
 
-optional<Ref> Ref::create(Storage st, const Digest & digest)
+optional<Ref> Ref::create(const Storage & st, const Digest & digest)
 {
 	if (!st.p->backend->contains(digest))
 		return nullopt;
@@ -939,7 +941,7 @@ optional<Ref> Ref::create(Storage st, const Digest & digest)
 	return Ref(shared_ptr<Priv>(p));
 }
 
-Ref Ref::zcreate(Storage st)
+Ref Ref::zcreate(const Storage & st)
 {
 	auto p = new Priv {
 		.storage = make_unique<PartialStorage>(st),
