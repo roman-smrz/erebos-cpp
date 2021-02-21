@@ -507,12 +507,16 @@ class WatchedHead : public Head<T>
 	friend class Head<T>;
 	WatchedHead(const Head<T> & h, int watcherId):
 		Head<T>(h), watcherId(watcherId) {}
-	WatchedHead(WatchedHead<T> && h):
-		Head<T>(h), watcherId(h.watcherId)
-	{ h.watcherId = -1; }
 	int watcherId;
 
 public:
+	WatchedHead(WatchedHead<T> && h):
+		Head<T>(h), watcherId(h.watcherId)
+	{ h.watcherId = -1; }
+
+	WatchedHead<T> & operator=(WatchedHead<T> && h)
+	{ watcherId = h.watcherId; h.watcherId = -1; return *this; }
+
 	WatchedHead<T> & operator=(const Head<T> & h) {
 		if (Head<T>::id() != h.id())
 			throw std::runtime_error("WatchedHead ID mismatch");

@@ -13,6 +13,7 @@ add_library(erebos
 	service
 	state
 	storage
+	sync
 	time
 	uuid
 )

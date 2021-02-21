@@ -33,3 +33,7 @@ void Service::Context::local(const LocalState & ls)
 {
 	p->local = p->local.ref().storage().store(ls);
 }
+
+void Service::serverStarted(const class Server &)
+{
+}

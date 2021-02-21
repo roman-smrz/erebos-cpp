@@ -29,6 +29,9 @@ public:
 	template<class T> LocalState shared(const Storage & st, const T & x)
 	{ return updateShared(T::sharedTypeId, x.store(st)); }
 
+	vector<Ref> sharedRefs() const;
+	LocalState sharedRefAdd(const Ref &) const;
+
 private:
 	vector<Ref> lookupShared(UUID) const;
 	LocalState updateShared(UUID, const vector<Ref> &) const;
@@ -47,7 +50,7 @@ template<class T>
 LocalState LocalState::shared(const vector<Stored<T>> & v) const
 {
 	vector<Ref> refs;
-	for (const auto x : v)
+	for (const auto & x : v)
 		refs.push_back(x.ref());
 	return updateShared(T::sharedTypeId, refs);
 }

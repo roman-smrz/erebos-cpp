@@ -32,6 +32,8 @@ public:
 
 	virtual UUID uuid() const = 0;
 	virtual void handle(Context &) = 0;
+
+	virtual void serverStarted(const class Server &);
 };
 
 }

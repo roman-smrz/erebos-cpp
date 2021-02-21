@@ -78,13 +78,41 @@ vector<Ref> LocalState::lookupShared(UUID type) const
 	return res;
 }
 
+vector<Ref> LocalState::sharedRefs() const
+{
+	vector<Ref> refs;
+	for (const auto & x : p->shared)
+		refs.push_back(x.ref());
+	return refs;
+}
+
+LocalState LocalState::sharedRefAdd(const Ref & ref) const
+{
+	const Storage * st;
+	if (p->shared.size() > 0)
+		st = &p->shared[0].ref().storage();
+	else if (p->identity)
+		st = &p->identity->ref()->storage();
+	else
+		st = &ref.storage();
+
+	LocalState ret;
+	ret.p->identity = p->identity;
+	ret.p->shared = p->shared;
+	ret.p->shared.push_back(SharedState(ref).store(*st));
+	filterAncestors(ret.p->shared);
+	return ret;
+}
+
 LocalState LocalState::updateShared(UUID type, const vector<Ref> & xs) const
 {
 	const Storage * st;
-	if (xs.size() > 0)
-		st = &xs[0].storage();
-	else if (p->shared.size() > 0)
+	if (p->shared.size() > 0)
 		st = &p->shared[0].ref().storage();
+	else if (p->identity)
+		st = &p->identity->ref()->storage();
+	else if (xs.size() > 0)
+		st = &xs[0].storage();
 	else
 		return *this;
 
