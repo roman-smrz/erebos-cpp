@@ -158,6 +158,7 @@ struct Server::Priv : enable_shared_from_this<Server::Priv>
 	bool finish = false;
 
 	Identity self;
+	Bhv<LocalState> localState;
 	WatchedHead<LocalState> localHead;
 	vector<unique_ptr<Service>> services;
 

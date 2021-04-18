@@ -5,6 +5,7 @@ include_directories(
 add_library(erebos
 	attach
 	channel
+	frp
 	identity
 	message
 	network

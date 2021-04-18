@@ -17,6 +17,7 @@ public:
 	~Server();
 
 	const Head<LocalState> & localHead() const;
+	const Bhv<LocalState> & localState() const;
 
 	const Identity & identity() const;
 	template<class S> S & svc();

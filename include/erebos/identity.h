@@ -24,6 +24,8 @@ public:
 	Stored<class PublicKey> keyMessage() const;
 
 	bool sameAs(const Identity &) const;
+	bool operator==(const Identity & other) const;
+	bool operator!=(const Identity & other) const;
 
 	std::optional<Ref> ref() const;
 

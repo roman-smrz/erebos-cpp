@@ -1,5 +1,6 @@
 #pragma once
 
+#include <erebos/frp.h>
 #include <erebos/time.h>
 #include <erebos/uuid.h>
 
@@ -496,6 +497,8 @@ public:
 	std::optional<Head<T>> update(const std::function<Stored<T>(const Stored<T> &)> &) const;
 	WatchedHead<T> watch(const std::function<void(const Head<T> &)> &) const;
 
+	Bhv<T> behavior() const;
+
 private:
 	UUID mid;
 	Stored<T> mstored;
@@ -524,6 +527,23 @@ public:
 		return *this;
 	}
 	~WatchedHead();
+};
+
+template<class T>
+class HeadBhv : public BhvSource<T>
+{
+public:
+	HeadBhv(const Head<T> & head):
+		whead(head.watch([this] (const Head<T> & cur) {
+			BhvCurTime ctime;
+			whead = cur;
+			BhvImplBase::updated(ctime);
+		})) {}
+
+	T get(const BhvCurTime &, const std::monostate &) const { return *whead; }
+
+private:
+	WatchedHead<T> whead;
 };
 
 template<typename T>
@@ -581,6 +601,12 @@ WatchedHead<T> Head<T>::watch(const std::function<void(const Head<T> &)> & watch
 		watcher(Head<T>(id, ref));
 	});
 	return WatchedHead<T>(*this, wid);
+}
+
+template<typename T>
+Bhv<T> Head<T>::behavior() const
+{
+	return make_shared<HeadBhv<T>>(*this);
 }
 
 template<class T>

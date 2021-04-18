@@ -77,6 +77,16 @@ bool Identity::sameAs(const Identity & other) const
 		other.p->data[0]->data->keyIdentity;
 }
 
+bool Identity::operator==(const Identity & other) const
+{
+	return p->data == other.p->data;
+}
+
+bool Identity::operator!=(const Identity & other) const
+{
+	return p->data != other.p->data;
+}
+
 optional<Ref> Identity::ref() const
 {
 	if (p->data.size() == 1)
