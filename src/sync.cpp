@@ -38,40 +38,25 @@ void SyncService::serverStarted(const Server & s)
 	server = &s;
 	server->peerList().onUpdate(std::bind(&SyncService::peerWatcher, this,
 				std::placeholders::_1, std::placeholders::_2));
-	watchedHead = server->localHead().watch(std::bind(&SyncService::localStateWatcher, this,
+	watchedLocal = server->localState().lens<vector<Ref>>().watch(std::bind(&SyncService::localStateWatcher, this,
 				std::placeholders::_1));
 }
 
 void SyncService::peerWatcher(size_t, const Peer * peer)
 {
-	if (peer && peer->identity()->finalOwner().sameAs(
-				server->identity().finalOwner())) {
-		scoped_lock lock(headMutex);
-		for (const auto & r : (*watchedHead)->sharedRefs())
-			peer->send(myUUID, r);
+	if (peer) {
+		if (auto id = peer->identity()) {
+			if (id->finalOwner().sameAs(server->identity().finalOwner()))
+				for (const auto & r : server->localState().get().sharedRefs())
+					peer->send(myUUID, r);
+		}
 	}
 }
 
-void SyncService::localStateWatcher(const Head<LocalState> & head)
+void SyncService::localStateWatcher(const vector<Ref> & refs)
 {
-	scoped_lock lock(headMutex);
-
-	bool same = head->sharedRefs().size() ==
-		(*watchedHead)->sharedRefs().size();
-	if (same) {
-		for (size_t i = 0; i < head->sharedRefs().size(); i++)
-			if (head->sharedRefs()[i].digest() !=
-					(*watchedHead)->sharedRefs()[i].digest()) {
-				same = false;
-				break;
-			}
-	}
-
-	if (!same) {
-		*watchedHead = head;
-		const auto & plist = server->peerList();
-		for (size_t i = 0; i < plist.size(); i++)
-			for (const auto & r : (*watchedHead)->sharedRefs())
-				plist.at(i).send(myUUID, r);
-	}
+	const auto & plist = server->peerList();
+	for (size_t i = 0; i < plist.size(); i++)
+		for (const auto & r : refs)
+			plist.at(i).send(myUUID, r);
 }

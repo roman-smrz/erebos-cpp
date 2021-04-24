@@ -928,6 +928,16 @@ const PartialStorage & PartialRef::storage() const
 	return *p->storage;
 }
 
+bool Ref::operator==(const Ref & other) const
+{
+	return p->digest == other.p->digest;
+}
+
+bool Ref::operator!=(const Ref & other) const
+{
+	return p->digest != other.p->digest;
+}
+
 optional<Ref> Ref::create(const Storage & st, const Digest & digest)
 {
 	if (!st.p->backend->contains(digest))

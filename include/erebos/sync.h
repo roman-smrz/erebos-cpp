@@ -6,8 +6,11 @@
 
 #include <optional>
 #include <mutex>
+#include <vector>
 
 namespace erebos {
+
+using std::vector;
 
 class SyncService : public Service
 {
@@ -22,11 +25,10 @@ public:
 
 private:
 	void peerWatcher(size_t, const class Peer *);
-	void localStateWatcher(const Head<LocalState> &);
+	void localStateWatcher(const vector<Ref> &);
 
 	const class Server * server;
-	std::mutex headMutex;
-	std::optional<WatchedHead<LocalState>> watchedHead;
+	std::optional<Watched<vector<Ref>>> watchedLocal;
 };
 
 }

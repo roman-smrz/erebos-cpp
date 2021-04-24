@@ -153,3 +153,15 @@ Ref SharedState::store(const Storage & st) const
 
 	return st.storeObject(Record(std::move(items)));
 }
+
+template<>
+optional<Identity> LocalState::lens<optional<Identity>>(const LocalState & x)
+{
+	return x.identity();
+}
+
+template<>
+vector<Ref> LocalState::lens<vector<Ref>>(const LocalState & x)
+{
+	return x.sharedRefs();
+}

@@ -182,8 +182,8 @@ public:
 	Ref & operator=(const Ref &) = default;
 	Ref & operator=(Ref &&) = default;
 
-	bool operator==(const Ref &) = delete;
-	bool operator!=(const Ref &) = delete;
+	bool operator==(const Ref &) const;
+	bool operator!=(const Ref &) const;
 
 	static std::optional<Ref> create(const Storage &, const Digest &);
 	static Ref zcreate(const Storage &);

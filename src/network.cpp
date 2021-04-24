@@ -24,6 +24,8 @@ using namespace erebos;
 Server::Server(const Head<LocalState> & head, vector<unique_ptr<Service>> && svcs):
 	p(new Priv(head, *head->identity(), std::move(svcs)))
 {
+	for (const auto & s : p->services)
+		s->serverStarted(*this);
 }
 
 Server:: Server(const std::shared_ptr<Priv> & ptr):

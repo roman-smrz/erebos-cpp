@@ -4,7 +4,6 @@
 #include <memory>
 #include <optional>
 #include <functional>
-#include <type_traits>
 #include <tuple>
 #include <variant>
 
@@ -115,6 +114,8 @@ public:
 		return impl->get(ctime, x);
 	}
 
+	template<typename C> BhvFun<A, C> lens() const;
+
 	const shared_ptr<BhvImpl<A, B>> impl;
 };
 
@@ -134,6 +135,8 @@ public:
 		return impl->get(ctime, monostate());
 	}
 	Watched<A> watch(function<void(const A &)>);
+
+	template<typename C> BhvFun<monostate, C> lens() const;
 
 	const shared_ptr<BhvSource<A>> impl;
 };
@@ -225,6 +228,29 @@ BhvFun<A, C> operator>>(const BhvFun<A, B> & f, const BhvFun<B, C> & g)
 	impl->dependsOn(f.impl);
 	impl->dependsOn(g.impl);
 	return impl;
+}
+
+
+template<typename A, typename B>
+class BhvLens : public BhvImpl<A, B>
+{
+public:
+	B get(const BhvCurTime &, const A & x) const override
+	{ return A::template lens<B>(x); }
+};
+
+template<typename A, typename B>
+template<typename C>
+BhvFun<A, C> BhvFun<A, B>::lens() const
+{
+	return *this >> BhvFun<B, C>(make_shared<BhvLens<B, C>>());
+}
+
+template<typename A>
+template<typename C>
+BhvFun<monostate, C> BhvFun<monostate, A>::lens() const
+{
+	return *this >> BhvFun<A, C>(make_shared<BhvLens<A, C>>());
 }
 
 }

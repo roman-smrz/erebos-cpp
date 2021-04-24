@@ -32,6 +32,8 @@ public:
 	vector<Ref> sharedRefs() const;
 	LocalState sharedRefAdd(const Ref &) const;
 
+	template<typename T> static T lens(const LocalState &);
+
 private:
 	vector<Ref> lookupShared(UUID) const;
 	LocalState updateShared(UUID, const vector<Ref> &) const;
