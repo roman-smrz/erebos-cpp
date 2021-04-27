@@ -5,26 +5,34 @@
 #include "pubkey.h"
 
 using std::optional;
+using std::shared_ptr;
 using std::vector;
 
 namespace erebos {
 
+struct SharedState::Priv
+{
+	vector<Ref> lookup(UUID) const;
+
+	vector<Stored<struct SharedData>> tip;
+};
+
 struct LocalState::Priv
 {
 	optional<Identity> identity;
-	vector<Stored<struct SharedState>> shared;
+	SharedState::Priv shared;
 };
 
-struct SharedState
+struct SharedData
 {
-	explicit SharedState(vector<Stored<SharedState>> prev,
+	explicit SharedData(vector<Stored<SharedData>> prev,
 			UUID type, vector<Ref> value):
 		prev(prev), type(type), value(value) {}
-	explicit SharedState(const Ref &);
-	static SharedState load(const Ref & ref) { return SharedState(ref); }
+	explicit SharedData(const Ref &);
+	static SharedData load(const Ref & ref) { return SharedData(ref); }
 	Ref store(const Storage &) const;
 
-	vector<Stored<SharedState>> prev;
+	vector<Stored<SharedData>> prev;
 	UUID type;
 	vector<Ref> value;
 };

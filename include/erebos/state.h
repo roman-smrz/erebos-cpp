@@ -8,6 +8,7 @@
 namespace erebos {
 
 using std::optional;
+using std::shared_ptr;
 using std::vector;
 
 class LocalState
@@ -42,6 +43,24 @@ private:
 	std::shared_ptr<Priv> p;
 };
 
+class SharedState
+{
+public:
+	template<class T> optional<T> get() const;
+	template<typename T> static T lens(const SharedState &);
+
+	bool operator==(const SharedState &) const;
+	bool operator!=(const SharedState &) const;
+
+private:
+	vector<Ref> lookup(UUID) const;
+
+	struct Priv;
+	SharedState(shared_ptr<Priv> && p): p(std::move(p)) {}
+	shared_ptr<Priv> p;
+	friend class LocalState;
+};
+
 template<class T>
 optional<T> LocalState::shared() const
 {
@@ -55,6 +74,18 @@ LocalState LocalState::shared(const vector<Stored<T>> & v) const
 	for (const auto & x : v)
 		refs.push_back(x.ref());
 	return updateShared(T::sharedTypeId, refs);
+}
+
+template<class T>
+optional<T> SharedState::get() const
+{
+	return T::load(lookup(T::sharedTypeId));
+}
+
+template<class T>
+T SharedState::lens(const SharedState & x)
+{
+	return T::value_type::load(x.lookup(T::value_type::sharedTypeId));
 }
 
 }

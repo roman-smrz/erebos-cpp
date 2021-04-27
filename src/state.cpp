@@ -23,8 +23,8 @@ LocalState::LocalState(const Ref & ref):
 		p->identity = Identity::load(*x);
 
 	for (auto i : rec->items("shared"))
-		if (const auto & x = i.as<SharedState>())
-			p->shared.push_back(*x);
+		if (const auto & x = i.as<SharedData>())
+			p->shared.tip.push_back(*x);
 }
 
 Ref LocalState::store(const Storage & st) const
@@ -33,7 +33,7 @@ Ref LocalState::store(const Storage & st) const
 
 	if (p->identity)
 		items.emplace_back("id", *p->identity->ref());
-	for (const auto & x : p->shared)
+	for (const auto & x : p->shared.tip)
 		items.emplace_back("shared", x);
 
 	return st.storeObject(Record(std::move(items)));
@@ -54,8 +54,18 @@ LocalState LocalState::identity(const Identity & id) const
 
 vector<Ref> LocalState::lookupShared(UUID type) const
 {
-	vector<Stored<SharedState>> found;
-	vector<Stored<SharedState>> process = p->shared;
+	return p->shared.lookup(type);
+}
+
+vector<Ref> SharedState::lookup(UUID type) const
+{
+	return p->lookup(type);
+}
+
+vector<Ref> SharedState::Priv::lookup(UUID type) const
+{
+	vector<Stored<SharedData>> found;
+	vector<Stored<SharedData>> process = tip;
 
 	while (!process.empty()) {
 		auto cur = std::move(process.back());
@@ -81,7 +91,7 @@ vector<Ref> LocalState::lookupShared(UUID type) const
 vector<Ref> LocalState::sharedRefs() const
 {
 	vector<Ref> refs;
-	for (const auto & x : p->shared)
+	for (const auto & x : p->shared.tip)
 		refs.push_back(x.ref());
 	return refs;
 }
@@ -89,8 +99,8 @@ vector<Ref> LocalState::sharedRefs() const
 LocalState LocalState::sharedRefAdd(const Ref & ref) const
 {
 	const Storage * st;
-	if (p->shared.size() > 0)
-		st = &p->shared[0].ref().storage();
+	if (p->shared.tip.size() > 0)
+		st = &p->shared.tip[0].ref().storage();
 	else if (p->identity)
 		st = &p->identity->ref()->storage();
 	else
@@ -99,16 +109,16 @@ LocalState LocalState::sharedRefAdd(const Ref & ref) const
 	LocalState ret;
 	ret.p->identity = p->identity;
 	ret.p->shared = p->shared;
-	ret.p->shared.push_back(SharedState(ref).store(*st));
-	filterAncestors(ret.p->shared);
+	ret.p->shared.tip.push_back(SharedData(ref).store(*st));
+	filterAncestors(ret.p->shared.tip);
 	return ret;
 }
 
 LocalState LocalState::updateShared(UUID type, const vector<Ref> & xs) const
 {
 	const Storage * st;
-	if (p->shared.size() > 0)
-		st = &p->shared[0].ref().storage();
+	if (p->shared.tip.size() > 0)
+		st = &p->shared.tip[0].ref().storage();
 	else if (p->identity)
 		st = &p->identity->ref()->storage();
 	else if (xs.size() > 0)
@@ -118,19 +128,30 @@ LocalState LocalState::updateShared(UUID type, const vector<Ref> & xs) const
 
 	LocalState ret;
 	ret.p->identity = p->identity;
-	ret.p->shared.push_back(SharedState(p->shared, type, xs).store(*st));
+	ret.p->shared.tip.push_back(SharedData(p->shared.tip, type, xs).store(*st));
 	return ret;
 }
 
 
-SharedState::SharedState(const Ref & ref)
+bool SharedState::operator==(const SharedState & other) const
+{
+	return p->tip == other.p->tip;
+}
+
+bool SharedState::operator!=(const SharedState & other) const
+{
+	return p->tip != other.p->tip;
+}
+
+
+SharedData::SharedData(const Ref & ref)
 {
 	auto rec = ref->asRecord();
 	if (!rec)
 		return;
 
 	for (auto i : rec->items("PREV"))
-		if (const auto & x = i.as<SharedState>())
+		if (const auto & x = i.as<SharedData>())
 			prev.push_back(*x);
 
 	if (auto x = rec->item("type").asUUID())
@@ -141,7 +162,7 @@ SharedState::SharedState(const Ref & ref)
 			value.push_back(*x);
 }
 
-Ref SharedState::store(const Storage & st) const
+Ref SharedData::store(const Storage & st) const
 {
 	vector<Record::Item> items;
 
@@ -164,4 +185,10 @@ template<>
 vector<Ref> LocalState::lens<vector<Ref>>(const LocalState & x)
 {
 	return x.sharedRefs();
+}
+
+template<>
+SharedState LocalState::lens<SharedState>(const LocalState & x)
+{
+	return SharedState(shared_ptr<SharedState::Priv>(x.p, &x.p->shared));
 }
