@@ -160,11 +160,18 @@ using Bhv = BhvFun<monostate, A>;
 template<typename A>
 Watched<A> Bhv<A>::watch(function<void(const A &)> f)
 {
+	BhvCurTime ctime;
+	auto & impl = BhvFun<monostate, A>::impl;
+	if (impl->needsUpdate(ctime))
+		impl->doUpdate(ctime);
+
 	auto cb = make_shared<function<void(const BhvCurTime &)>>(
 			[impl = BhvFun<monostate, A>::impl, f] (const BhvCurTime & ctime) {
 				f(impl->get(ctime, monostate()));
 			});
-	BhvFun<monostate, A>::impl->watchers.push_back(cb);
+
+	impl->watchers.push_back(cb);
+	f(impl->get(ctime, monostate()));
 	return Watched<A>(move(cb));
 }
 
