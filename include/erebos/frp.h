@@ -87,6 +87,8 @@ protected:
 	virtual bool needsUpdate(const BhvCurTime &) const;
 	virtual void doUpdate(const BhvCurTime &);
 
+	bool isDirty(const BhvCurTime &) const { return dirty; }
+
 	vector<weak_ptr<function<void(const BhvCurTime &)>>> watchers;
 private:
 	void markDirty(const BhvCurTime &, vector<shared_ptr<BhvImplBase>> &);
@@ -222,7 +224,7 @@ public:
 	{ x = g.impl->get(ctime, f.impl->get(ctime, monostate())); }
 
 	C get(const BhvCurTime & ctime, const monostate & m) const override
-	{ return x ? x.value() : g.impl->get(ctime, f.impl->get(ctime, m)); }
+	{ return x && !BhvImplBase::isDirty(ctime) ? x.value() : g.impl->get(ctime, f.impl->get(ctime, m)); }
 
 private:
 	BhvFun<monostate, B> f;
