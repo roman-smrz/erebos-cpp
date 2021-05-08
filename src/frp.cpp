@@ -10,12 +10,15 @@ using std::move;
 using std::mutex;
 using std::nullopt;
 using std::unique_lock;
-using std::weak_ptr;
 
 mutex bhvTimeMutex;
 condition_variable bhvTimeCond;
 bool bhvTimeRunning = false;
 uint64_t bhvTimeLast = 0;
+
+BhvTime::BhvTime(const BhvCurTime & ct):
+	BhvTime(ct.time())
+{}
 
 BhvCurTime::BhvCurTime()
 {

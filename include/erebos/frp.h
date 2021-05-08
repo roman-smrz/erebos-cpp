@@ -17,15 +17,24 @@ using std::monostate;
 using std::optional;
 using std::shared_ptr;
 using std::static_pointer_cast;
-using std::tuple;
 using std::vector;
 using std::weak_ptr;
+
+class BhvCurTime;
 
 class BhvTime
 {
 	BhvTime(uint64_t t): t(t) {}
-	friend class BhvCurTime;
+	friend BhvCurTime;
 public:
+	BhvTime(const BhvCurTime &);
+
+	bool operator==(const BhvTime & other) const { return t == other.t; }
+	bool operator!=(const BhvTime & other) const { return t != other.t; }
+	bool operator<(const BhvTime & other) const { return t < other.t; }
+	bool operator<=(const BhvTime & other) const { return t <= other.t; }
+	bool operator>(const BhvTime & other) const { return t > other.t; }
+	bool operator>=(const BhvTime & other) const { return t >= other.t; }
 
 private:
 	uint64_t t;
@@ -41,6 +50,8 @@ public:
 
 	BhvCurTime & operator=(const BhvCurTime &) = delete;
 	BhvCurTime & operator=(BhvCurTime &&);
+
+	BhvTime time() const { return t.value(); }
 
 private:
 	optional<BhvTime> t;
