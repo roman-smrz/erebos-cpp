@@ -1,5 +1,6 @@
 #include <erebos/sync.h>
 
+#include <erebos/identity.h>
 #include <erebos/network.h>
 
 using namespace erebos;

@@ -1,15 +1,37 @@
 #pragma once
 
-#include <erebos/identity.h>
+#include <erebos/storage.h>
 #include <erebos/uuid.h>
 
+#include <memory>
 #include <optional>
+#include <vector>
 
 namespace erebos {
 
 using std::optional;
 using std::shared_ptr;
 using std::vector;
+
+template<typename T>
+struct SharedType
+{
+	static const UUID id;
+	static T(*const load)(const vector<Ref> &);
+	static vector<Ref>(*const store)(const T &);
+};
+
+#define DECLARE_SHARED_TYPE(T) \
+	template<> const UUID erebos::SharedType<T>::id; \
+	template<> T(*const erebos::SharedType<T>::load)(const std::vector<erebos::Ref> &); \
+	template<> std::vector<erebos::Ref>(*const erebos::SharedType<T>::store) (const T &);
+
+#define DEFINE_SHARED_TYPE(T, id_, load_, store_) \
+	template<> const UUID erebos::SharedType<T>::id { id_ }; \
+	template<> T(*const erebos::SharedType<T>::load)(const vector<Ref> &) { load_ }; \
+	template<> std::vector<erebos::Ref>(*const erebos::SharedType<T>::store) (const T &) { store_ };
+
+class Identity;
 
 class LocalState
 {
@@ -24,11 +46,8 @@ public:
 	const optional<Identity> & identity() const;
 	LocalState identity(const Identity &) const;
 
-	template<class T> optional<T> shared() const;
-	template<class T> LocalState shared(const vector<Stored<T>> &) const;
-	template<class T> LocalState shared(const Stored<T> & x) const { return shared({ x }); };
-	template<class T> LocalState shared(const Storage & st, const T & x)
-	{ return updateShared(T::sharedTypeId, x.store(st)); }
+	template<class T> T shared() const;
+	template<class T> LocalState shared(const T & x) const;
 
 	vector<Ref> sharedRefs() const;
 	LocalState sharedRefAdd(const Ref &) const;
@@ -46,7 +65,7 @@ private:
 class SharedState
 {
 public:
-	template<class T> optional<T> get() const;
+	template<class T> T get() const;
 	template<typename T> static T lens(const SharedState &);
 
 	bool operator==(const SharedState &) const;
@@ -62,30 +81,27 @@ private:
 };
 
 template<class T>
-optional<T> LocalState::shared() const
+T LocalState::shared() const
 {
-	return T::load(lookupShared(T::sharedTypeId));
+	return SharedType<T>::load(lookupShared(SharedType<T>::id));
 }
 
 template<class T>
-LocalState LocalState::shared(const vector<Stored<T>> & v) const
+LocalState LocalState::shared(const T & x) const
 {
-	vector<Ref> refs;
-	for (const auto & x : v)
-		refs.push_back(x.ref());
-	return updateShared(T::sharedTypeId, refs);
+	return updateShared(SharedType<T>::id, SharedType<T>::store(x));
 }
 
 template<class T>
-optional<T> SharedState::get() const
+T SharedState::get() const
 {
-	return T::load(lookup(T::sharedTypeId));
+	return SharedType<T>::load(lookup(SharedType<T>::id));
 }
 
 template<class T>
 T SharedState::lens(const SharedState & x)
 {
-	return T::value_type::load(x.lookup(T::value_type::sharedTypeId));
+	return x.get<T>();
 }
 
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <erebos/state.h>
+#include <erebos/identity.h>
 
 #include "pubkey.h"
 
