@@ -6,6 +6,8 @@
 #include <set>
 #include <stdexcept>
 
+#include <iostream>
+
 using namespace erebos;
 
 using std::async;
@@ -38,6 +40,11 @@ optional<Identity> Identity::load(const vector<Ref> & refs)
 	for (const auto & ref : refs)
 		data.push_back(Stored<Signed<IdentityData>>::load(ref));
 
+	return load(data);
+}
+
+optional<Identity> Identity::load(const vector<Stored<Signed<IdentityData>>> & data)
+{
 	if (auto ptr = Priv::validate(data))
 		return Identity(ptr);
 	return nullopt;
@@ -59,6 +66,11 @@ vector<Ref> Identity::store(const Storage & st) const
 	for (const auto & x : p->data)
 		res.push_back(x.store(st));
 	return res;
+}
+
+const vector<Stored<Signed<IdentityData>>> & Identity::data() const
+{
+	return p->data;
 }
 
 optional<string> Identity::name() const

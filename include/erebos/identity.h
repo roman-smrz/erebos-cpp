@@ -6,6 +6,10 @@
 namespace erebos {
 
 using std::optional;
+using std::vector;
+
+template<class T> class Signed;
+struct IdentityData;
 
 class Identity
 {
@@ -17,8 +21,10 @@ public:
 
 	static std::optional<Identity> load(const Ref &);
 	static std::optional<Identity> load(const std::vector<Ref> &);
+	static std::optional<Identity> load(const std::vector<Stored<Signed<IdentityData>>> &);
 	std::vector<Ref> store() const;
 	std::vector<Ref> store(const Storage & st) const;
+	const vector<Stored<Signed<IdentityData>>> & data() const;
 
 	std::optional<std::string> name() const;
 	std::optional<Identity> owner() const;

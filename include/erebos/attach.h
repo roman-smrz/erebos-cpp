@@ -39,7 +39,7 @@ template<class T> class Signed;
 
 struct AttachIdentity
 {
-	Stored<Signed<class IdentityData>> identity;
+	Stored<Signed<struct IdentityData>> identity;
 	vector<vector<uint8_t>> keys;
 
 	static AttachIdentity load(const Ref &);

@@ -10,9 +10,8 @@ using std::vector;
 
 namespace erebos {
 
-class IdentityData
+struct IdentityData
 {
-public:
 	static IdentityData load(const Ref &);
 	Ref store(const Storage & st) const;
 
