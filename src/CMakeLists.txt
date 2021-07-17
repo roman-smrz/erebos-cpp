@@ -19,3 +19,20 @@ add_library(erebos
 	time
 	uuid
 )
+
+add_executable(erebos-bin
+	main
+)
+
+set_target_properties(erebos-bin
+	PROPERTIES OUTPUT_NAME erebos
+)
+
+target_link_libraries(erebos-bin
+	erebos
+	stdc++fs
+	Threads::Threads
+	${ZLIB_LIBRARIES}
+	${OPENSSL_LIBRARIES}
+	${B2_LIBRARY}
+	)
