@@ -1,0 +1,13 @@
+test:
+	spawn on node1 as p1
+	spawn on node2 as p2
+	send "create-identity Device1" to p1
+	send "create-identity Device2" to p2
+	send "start-server" to p1
+	send "start-server" to p2
+	expect /peer [0-9]+ 192.168.0.11:29665/ from p1
+	expect /peer [0-9]+ 192.168.0.12:29665/ from p1
+	expect /peer [0-9]+ 192.168.0.12:29665/ from p2
+	expect /peer [0-9]+ 192.168.0.11:29665/ from p2
+	expect /peer [0-9]+ Device2 Device2/ from p1
+	expect /peer [0-9]+ Device1 Device1/ from p2
