@@ -164,5 +164,6 @@ int main(int argc, char * argv[])
 	}
 
 	free(line);
+	server.reset();
 	return 0;
 }
