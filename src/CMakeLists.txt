@@ -3,25 +3,25 @@ include_directories(
 )
 
 add_library(erebos
-	attach
-	channel
-	contact
-	frp
-	identity
-	message
-	network
-	pairing
-	pubkey
-	service
-	state
-	storage
-	sync
-	time
-	uuid
+	attach.cpp
+	channel.cpp
+	contact.cpp
+	frp.cpp
+	identity.cpp
+	message.cpp
+	network.cpp
+	pairing.cpp
+	pubkey.cpp
+	service.cpp
+	state.cpp
+	storage.cpp
+	sync.cpp
+	time.cpp
+	uuid.cpp
 )
 
 add_executable(erebos-bin
-	main
+	main.cpp
 )
 
 set_target_properties(erebos-bin
