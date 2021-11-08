@@ -9,11 +9,12 @@
 #include <cstring>
 #include <filesystem>
 #include <functional>
-#include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <variant>
 #include <vector>
 
@@ -35,6 +36,11 @@ class Blob;
 
 template<typename T> class Stored;
 template<typename T> class Head;
+
+using std::bind;
+using std::call_once;
+using std::make_unique;
+using std::move;
 
 class PartialStorage
 {
@@ -346,7 +352,7 @@ std::optional<Stored<T>> RecordT<S>::Item::as() const
 template<typename T>
 class Stored
 {
-	Stored(Ref ref, std::future<T> && val): mref(ref), mval(std::move(val)) {}
+	Stored(Ref ref, T x);
 	friend class Storage;
 	friend class Head<T>;
 public:
@@ -355,51 +361,75 @@ public:
 	Stored & operator=(const Stored &) = default;
 	Stored & operator=(Stored &&) = default;
 
-	Stored(const Ref &);
+	Stored(Ref);
 	static Stored<T> load(const Ref &);
 	Ref store(const Storage &) const;
 
 	bool operator==(const Stored<T> & other) const
-	{ return mref.digest() == other.mref.digest(); }
+	{ return p->ref.digest() == other.p->ref.digest(); }
 	bool operator!=(const Stored<T> & other) const
-	{ return mref.digest() != other.mref.digest(); }
+	{ return p->ref.digest() != other.p->ref.digest(); }
 	bool operator<(const Stored<T> & other) const
-	{ return mref.digest() < other.mref.digest(); }
+	{ return p->ref.digest() < other.p->ref.digest(); }
 	bool operator<=(const Stored<T> & other) const
-	{ return mref.digest() <= other.mref.digest(); }
+	{ return p->ref.digest() <= other.p->ref.digest(); }
 	bool operator>(const Stored<T> & other) const
-	{ return mref.digest() > other.mref.digest(); }
+	{ return p->ref.digest() > other.p->ref.digest(); }
 	bool operator>=(const Stored<T> & other) const
-	{ return mref.digest() >= other.mref.digest(); }
+	{ return p->ref.digest() >= other.p->ref.digest(); }
 
-	const T & operator*() const { return mval.get(); }
-	const T * operator->() const { return &mval.get(); }
+	void init() const;
+	const T & operator*() const { init(); return *p->val; }
+	const T * operator->() const { init(); return p->val.get(); }
 
 	std::vector<Stored<T>> previous() const;
 	bool precedes(const Stored<T> &) const;
 
-	const Ref & ref() const { return mref; }
+	const Ref & ref() const { return p->ref; }
 
 private:
-	Ref mref;
-	std::shared_future<T> mval;
+	struct Priv {
+		const Ref ref;
+		mutable std::once_flag once {};
+		mutable std::unique_ptr<T> val {};
+		mutable std::function<T()> init {};
+	};
+	std::shared_ptr<Priv> p;
 };
+
+template<typename T>
+void Stored<T>::init() const
+{
+	call_once(p->once, [this]() {
+		p->val = std::make_unique<T>(p->init());
+		p->init = decltype(p->init)();
+	});
+}
 
 template<typename T>
 Stored<T> Storage::store(const T & val) const
 {
-	return Stored(val.store(*this), std::async(std::launch::deferred, [val] {
-		return val;
-	}));
+	return Stored(val.store(*this), val);
 }
 
 template<typename T>
-Stored<T>::Stored(const Ref & ref):
-	mref(ref),
-	mval(std::async(std::launch::deferred, [ref] {
-		return T::load(ref);
-	}))
-{}
+Stored<T>::Stored(Ref ref, T x):
+	p(new Priv {
+		.ref = move(ref),
+		.val = make_unique<T>(move(x)),
+	})
+{
+	call_once(p->once, [](){});
+}
+
+template<typename T>
+Stored<T>::Stored(Ref ref):
+	p(new Priv {
+		.ref = move(ref),
+	})
+{
+	p->init = [p = p.get()]() { return T::load(p->ref); };
+}
 
 template<typename T>
 Stored<T> Stored<T>::load(const Ref & ref)
@@ -410,15 +440,15 @@ Stored<T> Stored<T>::load(const Ref & ref)
 template<typename T>
 Ref Stored<T>::store(const Storage & st) const
 {
-	if (st == mref.storage())
-		return mref;
-	return st.storeObject(*mref);
+	if (st == p->ref.storage())
+		return p->ref;
+	return st.storeObject(*p->ref);
 }
 
 template<typename T>
 std::vector<Stored<T>> Stored<T>::previous() const
 {
-	auto rec = mref->asRecord();
+	auto rec = p->ref->asRecord();
 	if (!rec)
 		return {};
 
@@ -429,14 +459,14 @@ std::vector<Stored<T>> Stored<T>::previous() const
 			return {};
 
 		std::vector<Stored<T>> res;
-		for (const auto & i : drec->items("SPREV"))
+		for (const Record::Item & i : drec->items("SPREV"))
 			if (auto x = i.as<T>())
 				res.push_back(*x);
 		return res;
 	}
 
 	std::vector<Stored<T>> res;
-	for (auto & i : rec->items("PREV"))
+	for (const Record::Item & i : rec->items("PREV"))
 		if (auto x = i.as<T>())
 			res.push_back(*x);
 	return res;
@@ -481,8 +511,10 @@ template<class T> class WatchedHead;
 template<class T>
 class Head
 {
-	Head(UUID id, Ref ref, std::future<T> && val):
-		mid(id), mstored(ref, std::move(val)) {}
+	Head(UUID id, Stored<T> stored):
+		mid(id), mstored(move(stored)) {}
+	Head(UUID id, Ref ref, T val):
+		mid(id), mstored(move(ref), move(val)) {}
 	friend class Storage;
 public:
 	Head(UUID id, Ref ref): mid(id), mstored(ref) {}
@@ -568,16 +600,14 @@ Head<T> Storage::storeHead(const T & val) const
 {
 	auto ref = val.store(*this);
 	auto id = storeHead(T::headTypeId, ref);
-	return Head(id, ref, std::async(std::launch::deferred, [val] {
-		return val;
-	}));
+	return Head(id, ref, val);
 }
 
 template<typename T>
 Head<T> Storage::storeHead(const Stored<T> & val) const
 {
 	auto id = storeHead(T::headTypeId, val.ref());
-	return Head(id, val.ref(), val.mval);
+	return Head(id, val);
 }
 
 template<typename T>

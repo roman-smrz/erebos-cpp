@@ -3,8 +3,11 @@
 #include <erebos/identity.h>
 #include "pubkey.h"
 
+#include <future>
+
 using std::function;
 using std::optional;
+using std::shared_future;
 using std::string;
 using std::vector;
 

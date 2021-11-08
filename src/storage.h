@@ -12,7 +12,6 @@ namespace fs = std::filesystem;
 using std::function;
 using std::mutex;
 using std::optional;
-using std::shared_future;
 using std::shared_ptr;
 using std::unique_ptr;
 using std::unordered_map;
