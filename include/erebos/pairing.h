@@ -29,6 +29,8 @@ using std::vector;
 class PairingServiceBase : public Service
 {
 public:
+	virtual ~PairingServiceBase();
+
 	typedef function<void(const Peer &)> RequestInitHook;
 	void onRequestInit(RequestInitHook);
 
@@ -49,7 +51,6 @@ private:
 	static vector<uint8_t> nonceDigest(const Identity & id1, const Identity & id2,
 			const vector<uint8_t> & nonce1, const vector<uint8_t> & nonce2);
 	static string confirmationNumber(const vector<uint8_t> &);
-	void waitForConfirmation(Peer peer, string confirm);
 
 	RequestInitHook requestInitHook;
 	ConfirmHook responseHook;
@@ -70,14 +71,17 @@ private:
 	};
 
 	struct State {
+		mutex lock;
 		StatePhase phase;
 		vector<uint8_t> nonce;
 		vector<uint8_t> peerCheck;
 		promise<bool> success;
 	};
 
-	map<Peer, State> peerStates;
+	map<Peer, shared_ptr<State>> peerStates;
 	mutex stateLock;
+
+	void waitForConfirmation(Peer peer, weak_ptr<State> state, string confirm, ConfirmHook hook);
 };
 
 template<class Result>
