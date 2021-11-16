@@ -1,23 +1,37 @@
+#include <erebos/attach.h>
 #include <erebos/identity.h>
 #include <erebos/network.h>
 #include <erebos/storage.h>
 
 #include <filesystem>
 #include <functional>
+#include <future>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 using std::cerr;
 using std::cout;
 using std::endl;
 using std::function;
+using std::future;
+using std::invalid_argument;
+using std::make_unique;
+using std::map;
+using std::mutex;
 using std::optional;
 using std::ostringstream;
+using std::promise;
+using std::scoped_lock;
 using std::string;
+using std::thread;
 using std::unique_ptr;
 using std::vector;
 
@@ -35,9 +49,28 @@ fs::path getErebosDir()
 	return "./.erebos";
 }
 
+mutex outputMutex;
+void printLine(const string & line)
+{
+	scoped_lock lock(outputMutex);
+	cout << line << std::endl;
+}
+
 Storage st(getErebosDir());
 optional<Head<LocalState>> h;
 optional<Server> server;
+map<Peer, promise<bool>> attachAnswer;
+
+Peer getPeer(const string & name)
+{
+	auto & plist = server->peerList();
+	for (size_t i = 0; i < plist.size(); i++)
+		if (plist.at(i).name() == name)
+			return plist.at(i);
+	ostringstream ss;
+	ss << "peer '" << name << "' not found";
+	throw invalid_argument(ss.str().c_str());
+}
 
 struct Command
 {
@@ -48,7 +81,8 @@ struct Command
 void createIdentity(const vector<string> & args)
 {
 	optional<Identity> identity;
-	for (const auto & name : args) {
+	for (ssize_t i = args.size() - 1; i >= 0; i--) {
+		const auto & name = args[i];
 		auto builder = Identity::create(st);
 		builder.name(name);
 		if (identity)
@@ -65,9 +99,36 @@ void createIdentity(const vector<string> & args)
 	}
 }
 
+void printAttachResult(Peer peer, future<bool> && success)
+{
+	bool s = success.get();
+	ostringstream ss;
+	ss << "attach-result " << peer.name() << " " << s;
+	printLine(ss.str());
+}
+
+future<bool> confirmAttach(const Peer & peer, string confirm, future<bool> && success)
+{
+	thread(printAttachResult, peer, move(success)).detach();
+
+	promise<bool> promise;
+	auto input = promise.get_future();
+	attachAnswer[peer] = move(promise);
+
+	ostringstream ss;
+	ss << "attach-confirm " << peer.name() << " " << confirm;
+	printLine(ss.str());
+	return input;
+}
+
 void startServer(const vector<string> &)
 {
 	vector<unique_ptr<Service>> services;
+
+	auto atts = make_unique<AttachService>();
+	atts->onRequest(confirmAttach);
+	atts->onResponse(confirmAttach);
+	services.push_back(move(atts));
 
 	server.emplace(*h, move(services));
 
@@ -81,7 +142,7 @@ void startServer(const vector<string> &)
 		} else {
 			ss << " deleted";
 		}
-		cout << ss.str() << endl;
+		printLine(ss.str());
 	});
 }
 
@@ -90,10 +151,38 @@ void stopServer(const vector<string> &)
 	server.reset();
 }
 
+void watchLocalIdentity(const vector<string> &)
+{
+	auto bhv = h->behavior().lens<optional<Identity>>();
+	static auto watchedLocalIdentity = bhv.watch([] (const optional<Identity> & idt) {
+		if (idt) {
+			ostringstream ss;
+			ss << "local-identity";
+			for (optional<Identity> i = idt; i; i = i->owner())
+				ss << " " << i->name().value();
+			printLine(ss.str());
+		}
+	});
+}
+
+void attach(const vector<string> & params)
+{
+	server->svc<AttachService>().attachTo(getPeer(params.at(0)));
+}
+
+void attachAccept(const vector<string> & params)
+{
+	attachAnswer.extract(getPeer(params[0]))
+		.mapped().set_value(params[1] == "1");
+}
+
 vector<Command> commands = {
 	{ "create-identity", createIdentity },
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },
+	{ "watch-local-identity", watchLocalIdentity },
+	{ "attach", attach },
+	{ "attach-accept", attachAccept },
 };
 
 }
