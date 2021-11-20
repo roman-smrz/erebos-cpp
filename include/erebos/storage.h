@@ -496,11 +496,17 @@ void filterAncestors(std::vector<Stored<T>> & xs)
 
 	for (auto i = old.begin(); i != old.end(); i++) {
 		bool add = true;
-		for (auto j = i + 1; j != old.end(); j++)
-			if (i->precedes(*j)) {
+		for (const auto & x : xs)
+			if (i->precedes(x)) {
 				add = false;
 				break;
 			}
+		if (add)
+			for (auto j = i + 1; j != old.end(); j++)
+				if (i->precedes(*j)) {
+					add = false;
+					break;
+				}
 		if (add)
 			xs.push_back(std::move(*i));
 	}
