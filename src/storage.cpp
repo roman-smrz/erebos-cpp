@@ -821,14 +821,15 @@ bool Storage::replaceHead(UUID type, UUID id, const Ref & old, const Ref & ref)
 
 optional<Ref> Storage::updateHead(UUID type, UUID id, const Ref & old, const std::function<Ref(const Ref &)> & f)
 {
-	Ref r = f(old);
-	if (r.digest() == old.digest() || replaceHead(type, id, old, r))
+	auto cur = old.storage().headRef(type, id);
+	if (!cur)
+		return nullopt;
+
+	Ref r = f(*cur);
+	if (r.digest() == cur->digest() || replaceHead(type, id, *cur, r))
 		return r;
 
-	if (auto cur = old.storage().headRef(type, id))
-		return updateHead(type, id, *cur, f);
-	else
-		return nullopt;
+	return updateHead(type, id, *cur, f);
 }
 
 int Storage::watchHead(UUID type, UUID wid, const std::function<void(const Ref &)> watcher) const
