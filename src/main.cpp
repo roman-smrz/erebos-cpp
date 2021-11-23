@@ -2,6 +2,7 @@
 #include <erebos/identity.h>
 #include <erebos/network.h>
 #include <erebos/storage.h>
+#include <erebos/sync.h>
 
 #include <filesystem>
 #include <functional>
@@ -92,7 +93,10 @@ void createIdentity(const vector<string> & args)
 
 	if (identity) {
 		auto nh = h->update([&identity] (const auto & loc) {
-			return st.store(loc->identity(*identity));
+			auto ret = loc->identity(*identity);
+			if (identity->owner())
+				ret = ret.template shared<optional<Identity>>(identity->finalOwner());
+			return st.store(ret);
 		});
 		if (nh)
 			*h = *nh;
@@ -130,6 +134,8 @@ void startServer(const vector<string> &)
 	atts->onResponse(confirmAttach);
 	services.push_back(move(atts));
 
+	services.push_back(make_unique<SyncService>());
+
 	server.emplace(*h, move(services));
 
 	server->peerList().onUpdate([](size_t idx, const Peer * peer) {
@@ -165,6 +171,40 @@ void watchLocalIdentity(const vector<string> &)
 	});
 }
 
+void watchSharedIdentity(const vector<string> &)
+{
+	auto bhv = h->behavior().lens<SharedState>().lens<optional<Identity>>();
+	static auto watchedSharedIdentity = bhv.watch([] (const optional<Identity> & idt) {
+		if (idt) {
+			ostringstream ss;
+			ss << "shared-identity";
+			for (optional<Identity> i = idt; i; i = i->owner())
+				ss << " " << i->name().value();
+			printLine(ss.str());
+		}
+	});
+}
+
+void updateSharedIdentity(const vector<string> & params)
+{
+	if (params.size() != 1) {
+		throw invalid_argument("usage: update-shared-identity <name>");
+	}
+
+	auto nh = h->update([&params] (const Stored<LocalState> & loc) {
+		auto st = loc.ref().storage();
+		auto mbid = loc->shared<optional<Identity>>();
+		if (!mbid)
+			return loc;
+
+		auto b = mbid->modify();
+		b.name(params[0]);
+		return st.store(loc->shared<optional<Identity>>(optional(b.commit())));
+	});
+	if (nh)
+		*h = *nh;
+}
+
 void attach(const vector<string> & params)
 {
 	server->svc<AttachService>().attachTo(getPeer(params.at(0)));
@@ -181,6 +221,8 @@ vector<Command> commands = {
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },
 	{ "watch-local-identity", watchLocalIdentity },
+	{ "watch-shared-identity", watchSharedIdentity },
+	{ "update-shared-identity", updateSharedIdentity },
 	{ "attach", attach },
 	{ "attach-accept", attachAccept },
 };
