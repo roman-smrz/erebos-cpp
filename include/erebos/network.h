@@ -16,6 +16,9 @@ public:
 	Server(const std::shared_ptr<Priv> &);
 	~Server();
 
+	Server(const Server &) = delete;
+	Server & operator=(const Server &) = delete;
+
 	const Head<LocalState> & localHead() const;
 	const Bhv<LocalState> & localState() const;
 

@@ -136,7 +136,7 @@ struct WaitingRef
 	optional<Ref> check(ReplyBuilder &);
 };
 
-struct Server::Priv : enable_shared_from_this<Server::Priv>
+struct Server::Priv
 {
 	Priv(const Head<LocalState> & local, const Identity & self,
 			vector<unique_ptr<Service>> && svcs);

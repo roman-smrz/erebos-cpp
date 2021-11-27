@@ -269,7 +269,8 @@ Server::Priv::~Priv()
 
 shared_ptr<Server::Priv> Server::Priv::getptr()
 {
-	return shared_from_this();
+	// Creating temporary object, so just use null deleter
+	return shared_ptr<Priv>(this, [](Priv *){});
 }
 
 void Server::Priv::doListen()
