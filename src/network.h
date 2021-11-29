@@ -162,7 +162,6 @@ struct Server::Priv
 	Identity self;
 	Bhv<LocalState> localState;
 	WatchedHead<LocalState> localHead;
-	vector<unique_ptr<Service>> services;
 
 	thread threadListen;
 	thread threadAnnounce;
@@ -175,6 +174,9 @@ struct Server::Priv
 
 	int sock;
 	vector<in_addr> bcastAddresses;
+
+	// Start destruction with finalizing services
+	vector<unique_ptr<Service>> services;
 };
 
 }
