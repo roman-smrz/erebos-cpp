@@ -116,6 +116,13 @@ optional<Identity> Peer::identity() const
 	return nullopt;
 }
 
+const sockaddr_in & Peer::address() const
+{
+	if (auto speer = p->speer.lock())
+		return speer->addr;
+	throw runtime_error("Server no longer running");
+}
+
 void Peer::Priv::notifyWatchers()
 {
 	if (auto slist = list.lock()) {

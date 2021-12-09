@@ -4,6 +4,10 @@
 #include <erebos/storage.h>
 #include <erebos/sync.h>
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
 #include <filesystem>
 #include <functional>
 #include <future>
@@ -140,11 +144,16 @@ void startServer(const vector<string> &)
 
 	server->peerList().onUpdate([](size_t idx, const Peer * peer) {
 		ostringstream ss;
-		ss << "peer " << idx;
+		ss << "peer " << idx + 1;
 		if (peer) {
-			ss << " " << peer->name();
-			if (peer->identity() && peer->identity()->name())
-				ss << " " << *peer->identity()->name();
+			if (peer->identity()) {
+				ss << " id";
+				for (auto idt = peer->identity(); idt; idt = idt->owner())
+					ss << " " << (idt->name() ? *idt->name() : "<unnamed>");
+			} else {
+				const auto & paddr = peer->address();
+				ss << " addr " << inet_ntoa(paddr.sin_addr) << " " << ntohs(paddr.sin_port);
+			}
 		} else {
 			ss << " deleted";
 		}

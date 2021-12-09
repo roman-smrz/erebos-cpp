@@ -6,6 +6,8 @@
 #include <functional>
 #include <typeinfo>
 
+struct sockaddr_in;
+
 namespace erebos {
 
 class Server
@@ -54,6 +56,7 @@ public:
 
 	std::string name() const;
 	std::optional<Identity> identity() const;
+	const struct sockaddr_in & address() const;
 
 	bool hasChannel() const;
 	bool send(UUID, const Ref &) const;

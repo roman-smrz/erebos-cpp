@@ -9,13 +9,15 @@ test:
 	send "create-identity Device2" to p2
 	send "start-server" to p1
 	send "start-server" to p2
-	expect /local-identity Device1 Owner/ from p1
-	expect /local-identity Device2/ from p2
-	expect /shared-identity Owner/ from p1
-	expect /peer [0-9]+ 192.168.0.12:29665/ from p1
-	expect /peer [0-9]+ 192.168.0.11:29665/ from p2
-	expect /peer [0-9]+ Device2 Device2/ from p1
-	expect /peer [0-9]+ Owner Device1/ from p2
+	expect from p1:
+		/local-identity Device1 Owner/
+		/shared-identity Owner/
+		/peer 1 addr 192.168.0.12 29665/
+		/peer 1 id Device2/
+	expect from p2:
+		/local-identity Device2/
+		/peer 1 addr 192.168.0.11 29665/
+		/peer 1 id Device1 Owner/
 
 	send "attach Owner" to p2
 	expect /attach-confirm .*/ from p1
@@ -28,7 +30,7 @@ test:
 	expect /attach-result Owner 1/ from p2
 	expect /local-identity Device2 Owner/ from p2
 	expect /shared-identity Owner/ from p2
-	expect /peer [0-9]+ Owner Device2/ from p1
+	expect /peer 1 id Device2 Owner/ from p1
 
 	send "update-shared-identity NewOwner" to p1
 	expect /shared-identity NewOwner/ from p1
