@@ -222,6 +222,7 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self,
 	for (struct ifaddrs * ifa = addrs.get(); ifa; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET &&
 				ifa->ifa_flags & IFF_BROADCAST) {
+			localAddresses.push_back(((sockaddr_in*)ifa->ifa_addr)->sin_addr);
 			bcastAddresses.push_back(((sockaddr_in*)ifa->ifa_broadaddr)->sin_addr);
 		}
 	}
@@ -278,7 +279,7 @@ void Server::Priv::doListen()
 	vector<uint8_t> buf, decrypted, *current;
 	unique_lock<mutex> lock(dataMutex);
 
-	while (!finish) {
+	for (; !finish; lock.lock()) {
 		sockaddr_in paddr;
 
 		lock.unlock();
@@ -291,6 +292,9 @@ void Server::Priv::doListen()
 		if (ret == 0)
 			break;
 		buf.resize(ret);
+
+		if (isSelfAddress(paddr))
+			continue;
 
 		auto & peer = getPeer(paddr);
 
@@ -334,8 +338,6 @@ void Server::Priv::doListen()
 		} else {
 			std::cerr << "invalid packet\n";
 		}
-
-		lock.lock();
 	}
 }
 
@@ -367,6 +369,15 @@ void Server::Priv::doAnnounce()
 
 		announceCondvar.wait_until(lock, lastAnnounce + announceInterval);
 	}
+}
+
+bool Server::Priv::isSelfAddress(const sockaddr_in & paddr)
+{
+	for (const auto & in : localAddresses)
+		if (in.s_addr == paddr.sin_addr.s_addr &&
+				ntohs(paddr.sin_port) == discoveryPort)
+			return true;
+	return false;
 }
 
 Server::Peer & Server::Priv::getPeer(const sockaddr_in & paddr)

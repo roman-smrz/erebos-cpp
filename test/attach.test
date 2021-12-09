@@ -9,9 +9,7 @@ test:
 	send "start-server" to p2
 	expect /local-identity Device1 Owner/ from p1
 	expect /local-identity Device2/ from p2
-	expect /peer [0-9]+ 192.168.0.11:29665/ from p1
 	expect /peer [0-9]+ 192.168.0.12:29665/ from p1
-	expect /peer [0-9]+ 192.168.0.12:29665/ from p2
 	expect /peer [0-9]+ 192.168.0.11:29665/ from p2
 	expect /peer [0-9]+ Device2 Device2/ from p1
 	expect /peer [0-9]+ Owner Device1/ from p2

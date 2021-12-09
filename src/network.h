@@ -147,6 +147,7 @@ struct Server::Priv
 	void doListen();
 	void doAnnounce();
 
+	bool isSelfAddress(const sockaddr_in & paddr);
 	Peer & getPeer(const sockaddr_in & paddr);
 	void handlePacket(Peer &, const TransportHeader &, ReplyBuilder &);
 
@@ -173,6 +174,7 @@ struct Server::Priv
 	vector<weak_ptr<WaitingRef>> waiting;
 
 	int sock;
+	vector<in_addr> localAddresses;
 	vector<in_addr> bcastAddresses;
 
 	// Start destruction with finalizing services
