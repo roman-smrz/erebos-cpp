@@ -64,17 +64,38 @@ void printLine(const string & line)
 Storage st(getErebosDir());
 optional<Head<LocalState>> h;
 optional<Server> server;
-map<Peer, promise<bool>> attachAnswer;
 
-Peer getPeer(const string & name)
+struct TestPeer
 {
-	auto & plist = server->peerList();
-	for (size_t i = 0; i < plist.size(); i++)
-		if (plist.at(i).name() == name)
-			return plist.at(i);
+	Peer peer;
+	size_t id;
+	bool deleted = false;
+	promise<bool> attachAnswer {};
+};
+vector<TestPeer> testPeers;
+
+TestPeer & getPeer(const string & name)
+{
+	try {
+		return testPeers.at(std::stoi(name) - 1);
+	}
+	catch (const std::invalid_argument &) {}
+
+	for (auto & p : testPeers)
+		if (p.peer.name() == name)
+			return p;
+
 	ostringstream ss;
 	ss << "peer '" << name << "' not found";
 	throw invalid_argument(ss.str().c_str());
+}
+
+TestPeer & getPeer(const Peer & peer)
+{
+	for (auto & p : testPeers)
+		if (p.peer == peer)
+			return p;
+	throw invalid_argument("peer not found");
 }
 
 struct Command
@@ -111,7 +132,7 @@ void printAttachResult(Peer peer, future<bool> && success)
 {
 	bool s = success.get();
 	ostringstream ss;
-	ss << "attach-result " << peer.name() << " " << s;
+	ss << "attach-result " << getPeer(peer).id << " " << s;
 	printLine(ss.str());
 }
 
@@ -121,10 +142,10 @@ future<bool> confirmAttach(const Peer & peer, string confirm, future<bool> && su
 
 	promise<bool> promise;
 	auto input = promise.get_future();
-	attachAnswer[peer] = move(promise);
+	getPeer(peer).attachAnswer = move(promise);
 
 	ostringstream ss;
-	ss << "attach-confirm " << peer.name() << " " << confirm;
+	ss << "attach-confirm " << getPeer(peer).id << " " << confirm;
 	printLine(ss.str());
 	return input;
 }
@@ -143,9 +164,19 @@ void startServer(const vector<string> &)
 	server.emplace(*h, move(services));
 
 	server->peerList().onUpdate([](size_t idx, const Peer * peer) {
+		size_t i = 0;
+		while (idx > 0 && i < testPeers.size() && testPeers[i].deleted) {
+			if (!testPeers[i].deleted)
+				idx--;
+			i++;
+		}
+
 		ostringstream ss;
-		ss << "peer " << idx + 1;
+		ss << "peer " << i + 1;
 		if (peer) {
+			if (i >= testPeers.size())
+				testPeers.push_back(TestPeer { .peer = *peer, .id = i + 1 });
+
 			if (peer->identity()) {
 				ss << " id";
 				for (auto idt = peer->identity(); idt; idt = idt->owner())
@@ -155,6 +186,7 @@ void startServer(const vector<string> &)
 				ss << " addr " << inet_ntoa(paddr.sin_addr) << " " << ntohs(paddr.sin_port);
 			}
 		} else {
+			testPeers[i].deleted = true;
 			ss << " deleted";
 		}
 		printLine(ss.str());
@@ -216,13 +248,12 @@ void updateSharedIdentity(const vector<string> & params)
 
 void attach(const vector<string> & params)
 {
-	server->svc<AttachService>().attachTo(getPeer(params.at(0)));
+	server->svc<AttachService>().attachTo(getPeer(params.at(0)).peer);
 }
 
 void attachAccept(const vector<string> & params)
 {
-	attachAnswer.extract(getPeer(params[0]))
-		.mapped().set_value(params[1] == "1");
+	getPeer(params.at(0)).attachAnswer.set_value(params[1] == "1");
 }
 
 vector<Command> commands = {
