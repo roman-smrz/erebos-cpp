@@ -15,9 +15,11 @@
 using namespace erebos;
 
 using std::lock_guard;
+using std::make_shared;
 using std::runtime_error;
 using std::scoped_lock;
 using std::thread;
+using std::unique_lock;
 
 PairingServiceBase::~PairingServiceBase()
 {
@@ -69,10 +71,14 @@ void PairingServiceBase::handle(Context & ctx)
 
 	lock_guard lock(stateLock);
 	auto & state = peerStates.try_emplace(ctx.peer(), new State()).first->second;
-	scoped_lock lock2(state->lock);
+	unique_lock lock_state(state->lock);
 
 	if (auto request = rec->item("request").asBinary()) {
-		if (state->phase != StatePhase::NoPairing)
+		if (state->phase >= StatePhase::PairingDone) {
+			auto nstate = make_shared<State>();
+			lock_state = unique_lock(nstate->lock);
+			state = move(nstate);
+		} else if (state->phase != StatePhase::NoPairing)
 			return;
 
 		if (requestInitHook)
@@ -158,8 +164,14 @@ void PairingServiceBase::requestPairing(UUID serviceId, const Peer & peer)
 	if (!pid)
 		throw runtime_error("Pairing request for peer without known identity");
 
-	lock_guard lock(stateLock);
+	unique_lock lock(stateLock);
 	auto & state = peerStates.try_emplace(peer, new State()).first->second;
+
+	if (state->phase != StatePhase::NoPairing) {
+		auto nstate = make_shared<State>();
+		lock = unique_lock(nstate->lock);
+		state = move(nstate);
+	}
 
 	state->phase = StatePhase::OurRequest;
 	state->nonce.resize(32);
