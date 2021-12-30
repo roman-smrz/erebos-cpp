@@ -128,24 +128,25 @@ void createIdentity(const vector<string> & args)
 	}
 }
 
-void printAttachResult(Peer peer, future<bool> && success)
+void printAttachResult(string prefix, Peer peer, future<bool> && success)
 {
-	bool s = success.get();
 	ostringstream ss;
-	ss << "attach-result " << getPeer(peer).id << " " << s;
+	ss << prefix <<
+		(success.get() ? "-done " : "-failed ") <<
+		getPeer(peer).id;
 	printLine(ss.str());
 }
 
-future<bool> confirmAttach(const Peer & peer, string confirm, future<bool> && success)
+future<bool> confirmPairing(string prefix, const Peer & peer, string confirm, future<bool> && success)
 {
-	thread(printAttachResult, peer, move(success)).detach();
+	thread(printAttachResult, prefix, peer, move(success)).detach();
 
 	promise<bool> promise;
 	auto input = promise.get_future();
 	getPeer(peer).attachAnswer = move(promise);
 
 	ostringstream ss;
-	ss << "attach-confirm " << getPeer(peer).id << " " << confirm;
+	ss << prefix << " " << getPeer(peer).id << " " << confirm;
 	printLine(ss.str());
 	return input;
 }
@@ -154,9 +155,11 @@ void startServer(const vector<string> &)
 {
 	vector<unique_ptr<Service>> services;
 
+	using namespace std::placeholders;
+
 	auto atts = make_unique<AttachService>();
-	atts->onRequest(confirmAttach);
-	atts->onResponse(confirmAttach);
+	atts->onRequest(bind(confirmPairing, "attach-request", _1, _2, _3));
+	atts->onResponse(bind(confirmPairing, "attach-response", _1, _2, _3));
 	services.push_back(move(atts));
 
 	services.push_back(make_unique<SyncService>());
@@ -246,14 +249,19 @@ void updateSharedIdentity(const vector<string> & params)
 		*h = *nh;
 }
 
-void attach(const vector<string> & params)
+void attachTo(const vector<string> & params)
 {
 	server->svc<AttachService>().attachTo(getPeer(params.at(0)).peer);
 }
 
 void attachAccept(const vector<string> & params)
 {
-	getPeer(params.at(0)).attachAnswer.set_value(params[1] == "1");
+	getPeer(params.at(0)).attachAnswer.set_value(true);
+}
+
+void attachReject(const vector<string> & params)
+{
+	getPeer(params.at(0)).attachAnswer.set_value(false);
 }
 
 vector<Command> commands = {
@@ -263,8 +271,9 @@ vector<Command> commands = {
 	{ "watch-local-identity", watchLocalIdentity },
 	{ "watch-shared-identity", watchSharedIdentity },
 	{ "update-shared-identity", updateSharedIdentity },
-	{ "attach", attach },
+	{ "attach-to", attachTo },
 	{ "attach-accept", attachAccept },
+	{ "attach-reject", attachReject },
 };
 
 }

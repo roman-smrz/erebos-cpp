@@ -1,12 +1,12 @@
 test:
 	spawn on node1 as p1
 	spawn on node2 as p2
+	send "create-identity Device1 Owner" to p1
+	send "create-identity Device2" to p2
 	send "watch-local-identity" to p1
 	send "watch-local-identity" to p2
 	send "watch-shared-identity" to p1
 	send "watch-shared-identity" to p2
-	send "create-identity Device1 Owner" to p1
-	send "create-identity Device2" to p2
 	send "start-server" to p1
 	send "start-server" to p2
 	expect from p1:
@@ -19,15 +19,15 @@ test:
 		/peer 1 addr 192.168.0.11 29665/
 		/peer 1 id Device1 Owner/
 
-	send "attach 1" to p2
-	expect /attach-confirm 1 .*/ from p1
-	expect /attach-confirm 1 .*/ from p2
+	send "attach-to 1" to p2
+	expect /attach-request 1 .*/ from p1
+	expect /attach-response 1 .*/ from p2
 	# TODO: check code match
 
-	send "attach-accept 1 1" to p1
-	send "attach-accept 1 1" to p2
-	expect /attach-result 1 1/ from p1
-	expect /attach-result 1 1/ from p2
+	send "attach-accept 1" to p1
+	send "attach-accept 1" to p2
+	expect /attach-request-done 1/ from p1
+	expect /attach-response-done 1/ from p2
 	expect /local-identity Device2 Owner/ from p2
 	expect /shared-identity Owner/ from p2
 	expect /peer 1 id Device2 Owner/ from p1
