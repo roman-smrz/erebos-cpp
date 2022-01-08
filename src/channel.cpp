@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include <openssl/rand.h>
-
 using std::remove_const;
 using std::runtime_error;
 
@@ -70,53 +68,25 @@ ChannelAcceptData ChannelAcceptData::load(const Ref & ref)
 	};
 }
 
-Stored<Channel> ChannelAcceptData::channel() const
+unique_ptr<Channel> ChannelAcceptData::channel() const
 {
-	const auto & st = request.ref().storage();
-
 	if (auto secret = SecretKexKey::load(key))
-		return st.store(Channel(
+		return make_unique<Channel>(
 			request->data->peers,
-			secret->dh(*request->data->key)
-		));
+			secret->dh(*request->data->key),
+			false
+		);
 
 	if (auto secret = SecretKexKey::load(request->data->key))
-		return st.store(Channel(
+		return make_unique<Channel>(
 			request->data->peers,
-			secret->dh(*key)
-		));
+			secret->dh(*key),
+			true
+		);
 
 	throw runtime_error("failed to load secret DH key");
 }
 
-
-Ref Channel::store(const Storage & st) const
-{
-	vector<Record::Item> items;
-
-	for (const auto & p : peers)
-		items.emplace_back("peer", p);
-	items.emplace_back("enc", "aes-128-gcm");
-	items.emplace_back("key", key);
-
-	return st.storeObject(Record(std::move(items)));
-}
-
-Channel Channel::load(const Ref & ref)
-{
-	if (auto rec = ref->asRecord()) {
-		remove_const<decltype(peers)>::type peers;
-		for (const auto & i : rec->items("peer"))
-			if (auto p = i.as<Signed<IdentityData>>())
-				peers.push_back(*p);
-
-		if (rec->item("enc").asText() == "aes-128-gcm")
-			if (auto key = rec->item("key").asBinary())
-				return Channel(peers, std::move(*key));
-	}
-
-	return Channel({}, {});
-}
 
 Stored<ChannelRequest> Channel::generateRequest(const Storage & st,
 		const Identity & self, const Identity & peer)
@@ -165,20 +135,23 @@ optional<Stored<ChannelAccept>> Channel::acceptRequest(const Identity & self,
 	}));
 }
 
-vector<uint8_t> Channel::encrypt(const vector<uint8_t> & plain) const
+vector<uint8_t> Channel::encrypt(const vector<uint8_t> & plain)
 {
-	vector<uint8_t> res(plain.size() + 12 + 16 + 16);
+	vector<uint8_t> res(plain.size() + 8 + 16 + 16);
+	array<uint8_t, 12> iv;
 
-	if (RAND_bytes(res.data(), 12) != 1)
-		throw runtime_error("failed to generate random IV");
+	uint64_t beCount = htobe64(nonceCounter++);
+	std::copy_n(&beCount, 6, res.begin());
+	std::copy_n(nonceFixedOur.begin(), 6, iv.begin());
+	std::copy_n(res.begin() + 2, 6, iv.begin() + 6);
 
 	const unique_ptr<EVP_CIPHER_CTX, void(*)(EVP_CIPHER_CTX*)>
 		ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
 	EVP_EncryptInit_ex(ctx.get(), EVP_aes_128_gcm(),
-			nullptr, key.data(), res.data());
+			nullptr, key.data(), iv.data());
 
 	int outl = 0;
-	uint8_t * cur = res.data() + 12;
+	uint8_t * cur = res.data() + 8;
 
 	if (EVP_EncryptUpdate(ctx.get(), cur, &outl, plain.data(), plain.size()) != 1)
 		throw runtime_error("failed to encrypt data");
@@ -195,20 +168,24 @@ vector<uint8_t> Channel::encrypt(const vector<uint8_t> & plain) const
 	return res;
 }
 
-optional<vector<uint8_t>> Channel::decrypt(const vector<uint8_t> & ctext) const
+optional<vector<uint8_t>> Channel::decrypt(const vector<uint8_t> & ctext)
 {
 	vector<uint8_t> res(ctext.size());
+	array<uint8_t, 12> iv;
+
+	std::copy_n(nonceFixedPeer.begin(), 6, iv.begin());
+	std::copy_n(ctext.begin() + 2, 6, iv.begin() + 6);
 
 	const unique_ptr<EVP_CIPHER_CTX, void(*)(EVP_CIPHER_CTX*)>
 		ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
 	EVP_DecryptInit_ex(ctx.get(), EVP_aes_128_gcm(),
-			nullptr, key.data(), ctext.data());
+			nullptr, key.data(), iv.data());
 
 	int outl = 0;
 	uint8_t * cur = res.data();
 
 	if (EVP_DecryptUpdate(ctx.get(), cur, &outl,
-				ctext.data() + 12, ctext.size() - 12 - 16) != 1)
+				ctext.data() + 8, ctext.size() - 8 - 16) != 1)
 		return nullopt;
 	cur += outl;
 

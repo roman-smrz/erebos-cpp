@@ -50,7 +50,7 @@ struct Server::Peer
 		Stored<ChannelRequest>,
 		shared_ptr<struct WaitingRef>,
 		Stored<ChannelAccept>,
-		Stored<Channel>> channel;
+		unique_ptr<Channel>> channel;
 
 	Storage tempStorage;
 	PartialStorage partStorage;

@@ -4,7 +4,14 @@
 
 #include "identity.h"
 
+#include <atomic>
+#include <memory>
+
 namespace erebos {
+
+using std::array;
+using std::atomic;
+using std::unique_ptr;
 
 struct ChannelRequestData
 {
@@ -22,7 +29,7 @@ struct ChannelAcceptData
 	Ref store(const Storage & st) const;
 	static ChannelAcceptData load(const Ref &);
 
-	Stored<class Channel> channel() const;
+	unique_ptr<class Channel> channel() const;
 
 	const Stored<ChannelRequest> request;
 	const Stored<PublicKexKey> key;
@@ -34,25 +41,33 @@ class Channel
 {
 public:
 	Channel(const vector<Stored<Signed<IdentityData>>> & peers,
-			vector<uint8_t> && key):
+			vector<uint8_t> && key, bool ourRequest):
 		peers(peers),
-		key(std::move(key))
+		key(std::move(key)),
+		nonceFixedOur({ uint8_t(ourRequest ? 1 : 2), 0, 0, 0, 0, 0 }),
+		nonceFixedPeer({ uint8_t(ourRequest ? 2 : 1), 0, 0, 0, 0, 0 })
 	{}
 
-	Ref store(const Storage & st) const;
-	static Channel load(const Ref &);
+	Channel(const Channel &) = delete;
+	Channel(Channel &&) = delete;
+	Channel & operator=(const Channel &) = delete;
+	Channel & operator=(Channel &&) = delete;
 
 	static Stored<ChannelRequest> generateRequest(const Storage &,
 			const Identity & self, const Identity & peer);
 	static optional<Stored<ChannelAccept>> acceptRequest(const Identity & self,
 			const Identity & peer, const Stored<ChannelRequest> & request);
 
-	vector<uint8_t> encrypt(const vector<uint8_t> &) const;
-	optional<vector<uint8_t>> decrypt(const vector<uint8_t> &) const;
+	vector<uint8_t> encrypt(const vector<uint8_t> &);
+	optional<vector<uint8_t>> decrypt(const vector<uint8_t> &);
 
 private:
 	const vector<Stored<Signed<IdentityData>>> peers;
 	const vector<uint8_t> key;
+
+	const array<uint8_t, 6> nonceFixedOur;
+	const array<uint8_t, 6> nonceFixedPeer;
+	atomic<uint64_t> nonceCounter = 0;
 };
 
 }

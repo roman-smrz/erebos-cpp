@@ -135,7 +135,7 @@ void Peer::Priv::notifyWatchers()
 bool Peer::hasChannel() const
 {
 	if (auto speer = p->speer.lock())
-		return holds_alternative<Stored<Channel>>(speer->channel);
+		return holds_alternative<unique_ptr<Channel>>(speer->channel);
 	return false;
 }
 
@@ -306,8 +306,8 @@ void Server::Priv::doListen()
 		auto & peer = getPeer(paddr);
 
 		current = &buf;
-		if (holds_alternative<Stored<Channel>>(peer.channel)) {
-			if (auto dec = std::get<Stored<Channel>>(peer.channel)->decrypt(buf)) {
+		if (holds_alternative<unique_ptr<Channel>>(peer.channel)) {
+			if (auto dec = std::get<unique_ptr<Channel>>(peer.channel)->decrypt(buf)) {
 				decrypted = std::move(*dec);
 				current = &decrypted;
 			}
@@ -421,14 +421,14 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 			if (auto pref = std::get<PartialRef>(item.value)) {
 				if (holds_alternative<Stored<ChannelAccept>>(peer.channel) &&
 						std::get<Stored<ChannelAccept>>(peer.channel).ref().digest() == pref.digest())
-					peer.channel.emplace<Stored<Channel>>
+					peer.channel.emplace<unique_ptr<Channel>>
 						(std::get<Stored<ChannelAccept>>(peer.channel)->data->channel());
 			}
 			break;
 
 		case TransportHeader::Type::DataRequest: {
 			auto pref = std::get<PartialRef>(item.value);
-			if (holds_alternative<Stored<Channel>>(peer.channel) ||
+			if (holds_alternative<unique_ptr<Channel>>(peer.channel) ||
 					plaintextRefs.find(pref.digest()) != plaintextRefs.end()) {
 				if (auto ref = peer.tempStorage.ref(pref.digest())) {
 					TransportHeader::Item hitem { TransportHeader::Type::DataResponse, *ref };
@@ -514,7 +514,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 					if (holds_alternative<Identity>(peer.identity) &&
 							acc.isSignedBy(std::get<Identity>(peer.identity).keyMessage())) {
 						reply.header({ TransportHeader::Type::Acknowledged, pref });
-						peer.channel.emplace<Stored<Channel>>(acc.data->channel());
+						peer.channel.emplace<unique_ptr<Channel>>(acc.data->channel());
 					}
 				}
 			}
@@ -578,8 +578,8 @@ void Server::Peer::send(const TransportHeader & header, const vector<Object> & o
 		data.insert(data.end(), part.begin(), part.end());
 	}
 
-	if (holds_alternative<Stored<Channel>>(channel))
-		out = std::get<Stored<Channel>>(channel)->encrypt(data);
+	if (holds_alternative<unique_ptr<Channel>>(channel))
+		out = std::get<unique_ptr<Channel>>(channel)->encrypt(data);
 	else if (secure)
 		secureOutQueue.emplace_back(move(data));
 	else
@@ -676,11 +676,11 @@ void Server::Peer::trySendOutQueue()
 	if (secureOutQueue.empty())
 		return;
 
-	if (!holds_alternative<Stored<Channel>>(channel))
+	if (!holds_alternative<unique_ptr<Channel>>(channel))
 		return;
 
 	for (const auto & data : secureOutQueue) {
-		auto out = std::get<Stored<Channel>>(channel)->encrypt(data);
+		auto out = std::get<unique_ptr<Channel>>(channel)->encrypt(data);
 
 		sendto(server.sock, out.data(), out.size(), 0,
 				(sockaddr *) &addr, sizeof(addr));
