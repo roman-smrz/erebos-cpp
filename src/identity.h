@@ -28,6 +28,7 @@ struct IdentityData
 struct Identity::Priv
 {
 	vector<Stored<Signed<IdentityData>>> data;
+	vector<Stored<Signed<IdentityData>>> updates;
 	shared_future<optional<string>> name;
 	optional<Identity> owner;
 	Stored<PublicKey> keyMessage;

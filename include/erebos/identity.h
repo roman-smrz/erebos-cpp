@@ -38,6 +38,8 @@ public:
 	bool operator!=(const Identity & other) const;
 
 	std::optional<Ref> ref() const;
+	std::vector<Ref> refs() const;
+	std::vector<Ref> updates() const;
 
 	class Builder
 	{
@@ -56,6 +58,7 @@ public:
 
 	static Builder create(const Storage &);
 	Builder modify() const;
+	Identity update(const vector<Stored<Signed<IdentityData>>> &) const;
 
 private:
 	struct Priv;

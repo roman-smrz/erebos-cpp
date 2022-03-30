@@ -109,12 +109,13 @@ bool Identity::sameAs(const Identity & other) const
 
 bool Identity::operator==(const Identity & other) const
 {
-	return p->data == other.p->data;
+	return p->data == other.p->data &&
+		p->updates == other.p->updates;
 }
 
 bool Identity::operator!=(const Identity & other) const
 {
-	return p->data != other.p->data;
+	return !(*this == other);
 }
 
 optional<Ref> Identity::ref() const
@@ -122,6 +123,24 @@ optional<Ref> Identity::ref() const
 	if (p->data.size() == 1)
 		return p->data[0].ref();
 	return nullopt;
+}
+
+vector<Ref> Identity::refs() const
+{
+	vector<Ref> res;
+	res.reserve(p->data.size());
+	for (const auto & idata : p->data)
+		res.push_back(idata.ref());
+	return res;
+}
+
+vector<Ref> Identity::updates() const
+{
+	vector<Ref> res;
+	res.reserve(p->updates.size());
+	for (const auto & idata : p->updates)
+		res.push_back(idata.ref());
+	return res;
 }
 
 Identity::Builder Identity::create(const Storage & st)
@@ -141,6 +160,37 @@ Identity::Builder Identity::modify() const
 		.keyIdentity = p->data[0]->data->keyIdentity,
 		.keyMessage = p->data[0]->data->keyMessage,
 	});
+}
+
+Identity Identity::update(const vector<Stored<Signed<IdentityData>>> & updates) const
+{
+	vector<Stored<Signed<IdentityData>>> ndata = p->data;
+	vector<Stored<Signed<IdentityData>>> ownerUpdates = p->updates;
+
+	for (const auto & u : updates) {
+		vector<Stored<Signed<IdentityData>>> tmp = p->data;
+		tmp.push_back(u);
+
+		size_t tmp_size = tmp.size();
+		filterAncestors(tmp);
+
+		if (tmp.size() < tmp_size)
+			ndata.push_back(u);
+		else
+			ownerUpdates.push_back(u);
+	}
+
+	filterAncestors(ndata);
+	filterAncestors(ownerUpdates);
+
+	if (auto p = Priv::validate(ndata)) {
+		p->updates = move(ownerUpdates);
+		if (p->owner && !p->updates.empty())
+			p->owner = p->owner->update(p->updates);
+		return Identity(move(p));
+	}
+
+	return *this;
 }
 
 
@@ -263,6 +313,7 @@ shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<Stored<Signed<I
 
 	auto p = new Priv {
 		.data = sdata,
+		.updates = {},
 		.name = {},
 		.owner = nullopt,
 		.keyMessage = keyMessageItem.value()->keyMessage.value(),
