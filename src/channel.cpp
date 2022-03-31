@@ -1,6 +1,7 @@
 #include "channel.h"
 
 #include <algorithm>
+#include <cstring>
 #include <stdexcept>
 
 using std::remove_const;
@@ -141,7 +142,7 @@ vector<uint8_t> Channel::encrypt(const vector<uint8_t> & plain)
 	array<uint8_t, 12> iv;
 
 	uint64_t beCount = htobe64(nonceCounter++);
-	std::copy_n(&beCount, 6, res.begin());
+	std::memcpy(res.data(), &beCount, 8);
 	std::copy_n(nonceFixedOur.begin(), 6, iv.begin());
 	std::copy_n(res.begin() + 2, 6, iv.begin() + 6);
 
