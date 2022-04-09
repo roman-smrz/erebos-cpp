@@ -24,7 +24,7 @@ void SyncService::handle(Context & ctx)
 		return;
 
 	const auto & powner = pid->finalOwner();
-	const auto & owner = ctx.peer().server().identity().finalOwner();
+	const Identity owner = ctx.peer().server().identity().finalOwner();
 
 	if (!powner.sameAs(owner))
 		return;
@@ -57,7 +57,11 @@ void SyncService::peerWatcher(size_t, const Peer * peer)
 void SyncService::localStateWatcher(const vector<Ref> & refs)
 {
 	const auto & plist = server->peerList();
+	const Identity owner = server->identity().finalOwner();
+
 	for (size_t i = 0; i < plist.size(); i++)
-		for (const auto & r : refs)
-			plist.at(i).send(myUUID, r);
+		if (auto id = plist.at(i).identity())
+			if (id->finalOwner().sameAs(owner))
+				for (const auto & r : refs)
+					plist.at(i).send(myUUID, r);
 }
