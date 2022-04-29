@@ -45,6 +45,7 @@ struct Server::Peer
 	variant<monostate,
 		shared_ptr<struct WaitingRef>,
 		Identity> identity;
+	vector<shared_ptr<WaitingRef>> identityUpdates;
 
 	variant<monostate,
 		Stored<ChannelRequest>,
@@ -133,6 +134,7 @@ struct WaitingRef
 	const Server::Peer & peer;
 	vector<Digest> missing;
 
+	optional<Ref> check();
 	optional<Ref> check(ReplyBuilder &);
 };
 
