@@ -6,6 +6,7 @@
 #include <functional>
 #include <tuple>
 #include <variant>
+#include <vector>
 
 namespace erebos {
 
