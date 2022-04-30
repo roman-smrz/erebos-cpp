@@ -229,6 +229,23 @@ void watchSharedIdentity(const vector<string> &)
 	});
 }
 
+void updateLocalIdentity(const vector<string> & params)
+{
+	if (params.size() != 1) {
+		throw invalid_argument("usage: update-local-identity <name>");
+	}
+
+	auto nh = h->update([&params] (const Stored<LocalState> & loc) {
+		auto st = loc.ref().storage();
+
+		auto b = loc->identity()->modify();
+		b.name(params[0]);
+		return st.store(loc->identity(b.commit()));
+	});
+	if (nh)
+		*h = *nh;
+}
+
 void updateSharedIdentity(const vector<string> & params)
 {
 	if (params.size() != 1) {
@@ -270,6 +287,7 @@ vector<Command> commands = {
 	{ "stop-server", stopServer },
 	{ "watch-local-identity", watchLocalIdentity },
 	{ "watch-shared-identity", watchSharedIdentity },
+	{ "update-local-identity", updateLocalIdentity },
 	{ "update-shared-identity", updateSharedIdentity },
 	{ "attach-to", attachTo },
 	{ "attach-accept", attachAccept },
