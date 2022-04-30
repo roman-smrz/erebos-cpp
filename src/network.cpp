@@ -252,7 +252,7 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self,
 	sockaddr_in laddr = {};
 	laddr.sin_family = AF_INET;
 	laddr.sin_port = htons(discoveryPort);
-	if (bind(sock, (sockaddr *) &laddr, sizeof(laddr)) < 0)
+	if (::bind(sock, (sockaddr *) &laddr, sizeof(laddr)) < 0)
 		throw std::system_error(errno, std::generic_category());
 
 	threadListen = thread([this] { doListen(); });
