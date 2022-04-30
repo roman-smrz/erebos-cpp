@@ -1,7 +1,7 @@
 test:
 	spawn on node1 as p1
 	spawn on node2 as p2
-	send "create-identity Device1" to p1
+	send "create-identity Device1 Owner" to p1
 	send "create-identity Device2" to p2
 	send "start-server" to p1
 	send "start-server" to p2
@@ -10,4 +10,16 @@ test:
 		/peer 1 id Device2/
 	expect from p2:
 		/peer 1 addr 192.168.0.11 29665/
-		/peer 1 id Device1/
+		/peer 1 id Device1 Owner/
+
+	send "update-local-identity Device1A" to p1
+	expect /peer 1 id Device1A Owner/ from p2
+
+	send "update-shared-identity OwnerA" to p1
+	expect /peer 1 id Device1A OwnerA/ from p2
+
+	send "update-local-identity Device1B" to p1
+	expect /peer 1 id Device1B OwnerA/ from p2
+
+	send "update-shared-identity OwnerB" to p1
+	expect /peer 1 id Device1B OwnerB/ from p2
