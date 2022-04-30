@@ -4,6 +4,8 @@
 #include <cstring>
 #include <stdexcept>
 
+#include <endian.h>
+
 using std::remove_const;
 using std::runtime_error;
 
