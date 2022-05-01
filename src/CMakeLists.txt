@@ -28,11 +28,13 @@ set_target_properties(erebos-bin
 	PROPERTIES OUTPUT_NAME erebos
 )
 
-target_link_libraries(erebos-bin
-	erebos
-	stdc++fs
-	Threads::Threads
-	${ZLIB_LIBRARIES}
-	${OPENSSL_LIBRARIES}
-	${B2_LIBRARY}
-	)
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+	target_link_libraries(erebos-bin
+		erebos
+		stdc++fs
+		Threads::Threads
+		${ZLIB_LIBRARIES}
+		${OPENSSL_LIBRARIES}
+		${B2_LIBRARY}
+		)
+endif()
