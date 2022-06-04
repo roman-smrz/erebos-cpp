@@ -6,10 +6,10 @@ test:
 	send "start-server" to p1
 	send "start-server" to p2
 	expect from p1:
-		/peer 1 addr 192.168.0.12 29665/
+		/peer 1 addr ${node2.ip} 29665/
 		/peer 1 id Device2/
 	expect from p2:
-		/peer 1 addr 192.168.0.11 29665/
+		/peer 1 addr ${node1.ip} 29665/
 		/peer 1 id Device1 Owner/
 
 	send "update-local-identity Device1A" to p1

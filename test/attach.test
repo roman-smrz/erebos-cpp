@@ -9,11 +9,11 @@ test:
 	send "start-server" to p2
 	expect from p1:
 		/local-identity Device1 Owner/
-		/peer 1 addr 192.168.0.12 29665/
+		/peer 1 addr ${node2.ip} 29665/
 		/peer 1 id Device2/
 	expect from p2:
 		/local-identity Device2/
-		/peer 1 addr 192.168.0.11 29665/
+		/peer 1 addr ${node1.ip} 29665/
 		/peer 1 id Device1 Owner/
 
 	send "attach-to 1" to p2
