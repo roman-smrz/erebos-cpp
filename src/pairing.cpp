@@ -204,8 +204,8 @@ string PairingServiceBase::confirmationNumber(const vector<uint8_t> & digest)
 {
 	uint32_t confirm;
 	memcpy(&confirm, digest.data(), sizeof(confirm));
-	string ret(7, '\0');
-	snprintf(ret.data(), ret.size(), "%06d", ntohl(confirm) % 1000000);
+	string ret(6, '\0');
+	snprintf(ret.data(), ret.size() + 1, "%06d", ntohl(confirm) % 1000000);
 	return ret;
 }
 
