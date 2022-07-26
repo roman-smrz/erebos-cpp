@@ -128,18 +128,28 @@ void createIdentity(const vector<string> & args)
 	}
 }
 
-void printAttachResult(string prefix, Peer peer, future<bool> && success)
+void printPairingResult(string prefix, Peer peer, future<PairingServiceBase::Outcome> && future)
 {
+	auto outcome = future.get();
 	ostringstream ss;
 	ss << prefix <<
-		(success.get() ? "-done " : "-failed ") <<
+		(outcome == PairingServiceBase::Outcome::Success ? "-done " : "-failed ") <<
 		getPeer(peer).id;
+	switch (outcome)
+	{
+	case PairingServiceBase::Outcome::Success: break;
+	case PairingServiceBase::Outcome::PeerRejected: ss << " rejected"; break;
+	case PairingServiceBase::Outcome::UserRejected: ss << " user"; break;
+	case PairingServiceBase::Outcome::UnexpectedMessage: ss << " unexpected"; break;
+	case PairingServiceBase::Outcome::NonceMismatch: ss << " nonce"; break;
+	case PairingServiceBase::Outcome::Stale: ss << " stale"; break;
+	}
 	printLine(ss.str());
 }
 
-future<bool> confirmPairing(string prefix, const Peer & peer, string confirm, future<bool> && success)
+future<bool> confirmPairing(string prefix, const Peer & peer, string confirm, future<PairingServiceBase::Outcome> && outcome)
 {
-	thread(printAttachResult, prefix, peer, move(success)).detach();
+	thread(printPairingResult, prefix, peer, move(outcome)).detach();
 
 	promise<bool> promise;
 	auto input = promise.get_future();

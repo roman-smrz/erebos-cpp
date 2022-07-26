@@ -29,7 +29,7 @@ PairingServiceBase::~PairingServiceBase()
 		scoped_lock lock(state->lock);
 		if (state->phase != StatePhase::PairingDone &&
 				state->phase != StatePhase::PairingFailed) {
-			state->success.set_value(false);
+			state->outcome.set_value(Outcome::Stale);
 			state->phase = StatePhase::PairingFailed;
 		}
 	}
@@ -124,7 +124,7 @@ void PairingServiceBase::handle(Context & ctx)
 				requestNonceFailedHook(ctx.peer());
 			if (state->phase < StatePhase::PairingDone) {
 				state->phase = StatePhase::PairingFailed;
-				state->success.set_value(false);
+				state->outcome.set_value(Outcome::NonceMismatch);
 			}
 			return;
 		}
@@ -143,7 +143,7 @@ void PairingServiceBase::handle(Context & ctx)
 	else if (auto reject = rec->item("reject").asText()) {
 		if (state->phase < StatePhase::PairingDone) {
 			state->phase = StatePhase::PairingFailed;
-			state->success.set_value(false);
+			state->outcome.set_value(Outcome::PeerRejected);
 		}
 	}
 
@@ -151,7 +151,7 @@ void PairingServiceBase::handle(Context & ctx)
 		if (state->phase == StatePhase::OurRequestReady) {
 			handlePairingResult(ctx);
 			state->phase = StatePhase::PairingDone;
-			state->success.set_value(true);
+			state->outcome.set_value(Outcome::Success);
 		} else {
 			result = ctx.ref();
 		}
@@ -211,16 +211,16 @@ string PairingServiceBase::confirmationNumber(const vector<uint8_t> & digest)
 
 void PairingServiceBase::waitForConfirmation(Peer peer, weak_ptr<State> wstate, string confirm, ConfirmHook hook)
 {
-	future<bool> success;
+	future<Outcome> outcome;
 	if (auto state = wstate.lock()) {
-		success = state->success.get_future();
+		outcome = state->outcome.get_future();
 	} else {
 		return;
 	}
 
 	bool ok;
 	try {
-		ok = hook(peer, confirm, std::move(success)).get();
+		ok = hook(peer, confirm, std::move(outcome)).get();
 	}
 	catch (const std::future_error & e) {
 		if (e.code() == std::future_errc::broken_promise)
@@ -249,20 +249,20 @@ void PairingServiceBase::waitForConfirmation(Peer peer, weak_ptr<State> wstate, 
 					return ctx.local();
 				});
 				state->phase = StatePhase::PairingDone;
-				state->success.set_value(true);
+				state->outcome.set_value(Outcome::Success);
 			} else {
 				state->phase = StatePhase::OurRequestReady;
 			}
 		} else if (state->phase == StatePhase::PeerRequestConfirm) {
 			peer.send(uuid(), handlePairingCompleteRef(peer));
 			state->phase = StatePhase::PairingDone;
-			state->success.set_value(true);
+			state->outcome.set_value(Outcome::Success);
 		}
 	} else {
 		if (state->phase != StatePhase::PairingFailed) {
 			peer.send(uuid(), Object(Record({{ "reject", string() }})));
 			state->phase = StatePhase::PairingFailed;
-			state->success.set_value(false);
+			state->outcome.set_value(Outcome::UserRejected);
 		}
 	}
 }

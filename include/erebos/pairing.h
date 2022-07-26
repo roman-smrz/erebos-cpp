@@ -34,7 +34,17 @@ public:
 	typedef function<void(const Peer &)> RequestInitHook;
 	void onRequestInit(RequestInitHook);
 
-	typedef function<future<bool>(const Peer &, string, future<bool> &&)> ConfirmHook;
+	enum class Outcome
+	{
+		Success,
+		PeerRejected,
+		UserRejected,
+		UnexpectedMessage,
+		NonceMismatch,
+		Stale,
+	};
+
+	typedef function<future<bool>(const Peer &, string, future<Outcome> &&)> ConfirmHook;
 	void onResponse(ConfirmHook);
 	void onRequest(ConfirmHook);
 
@@ -75,7 +85,7 @@ private:
 		StatePhase phase;
 		vector<uint8_t> nonce;
 		vector<uint8_t> peerCheck;
-		promise<bool> success;
+		promise<Outcome> outcome;
 	};
 
 	map<Peer, shared_ptr<State>> peerStates;
