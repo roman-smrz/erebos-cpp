@@ -20,15 +20,15 @@ test:
 	expect /attach-request 1 .*/ from p1
 	expect /attach-response 1 .*/ from p2
 	send "attach-reject 1" to p1
-	expect /attach-request-failed 1/ from p1
-	expect /attach-response-failed 1/ from p2
+	expect /attach-request-failed 1 user/ from p1
+	expect /attach-response-failed 1 rejected/ from p2
 
 	send "attach-to 1" to p2
 	expect /attach-request 1 .*/ from p1
 	expect /attach-response 1 .*/ from p2
 	send "attach-reject 1" to p2
-	expect /attach-request-failed 1/ from p1
-	expect /attach-response-failed 1/ from p2
+	expect /attach-request-failed 1 rejected/ from p1
+	expect /attach-response-failed 1 user/ from p2
 
 	send "attach-to 1" to p2
 	expect /attach-request 1 ([0-9]*)/ from p1 capture code1
