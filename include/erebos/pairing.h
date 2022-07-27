@@ -83,6 +83,8 @@ private:
 	struct State {
 		mutex lock;
 		StatePhase phase;
+		optional<Identity> idReq;
+		optional<Identity> idRsp;
 		vector<uint8_t> nonce;
 		vector<uint8_t> peerCheck;
 		promise<Outcome> outcome;

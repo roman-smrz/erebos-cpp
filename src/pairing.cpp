@@ -74,6 +74,24 @@ void PairingServiceBase::handle(Context & ctx)
 	unique_lock lock_state(state->lock);
 
 	if (auto request = rec->item("request").asBinary()) {
+		auto idReqRef = rec->item("id-req").asRef();
+		if (!idReqRef)
+			return;
+		auto idReq = Identity::load(*idReqRef);
+		if (!idReq)
+			return;
+		if (!idReq->sameAs(*pid))
+			return;
+
+		auto idRspRef = rec->item("id-rsp").asRef();
+		if (!idRspRef)
+			return;
+		auto idRsp = Identity::load(*idRspRef);
+		if (!idRsp)
+			return;
+		if (!idRsp->sameAs(ctx.peer().server().identity()))
+			return;
+
 		if (state->phase >= StatePhase::PairingDone) {
 			auto nstate = make_shared<State>();
 			lock_state = unique_lock(nstate->lock);
@@ -85,6 +103,8 @@ void PairingServiceBase::handle(Context & ctx)
 			requestInitHook(ctx.peer());
 
 		state->phase = StatePhase::PeerRequest;
+		state->idReq = idReq;
+		state->idRsp = idRsp;
 		state->peerCheck = *request;
 		state->nonce.resize(32);
 		RAND_bytes(state->nonce.data(), state->nonce.size());
@@ -102,7 +122,7 @@ void PairingServiceBase::handle(Context & ctx)
 
 		if (responseHook) {
 			string confirm = confirmationNumber(nonceDigest(
-				ctx.peer().server().identity(), *pid, 
+				*state->idReq, *state->idRsp,
 				state->nonce, *response));
 			std::thread(&PairingServiceBase::waitForConfirmation,
 					this, ctx.peer(), state, confirm, responseHook).detach();
@@ -116,8 +136,11 @@ void PairingServiceBase::handle(Context & ctx)
 	}
 
 	else if (auto reqnonce = rec->item("reqnonce").asBinary()) {
+		if (state->phase != StatePhase::PeerRequest)
+			return;
+
 		auto check = nonceDigest(
-				*pid, ctx.peer().server().identity(),
+				*state->idReq, *state->idRsp,
 				*reqnonce, vector<uint8_t>());
 		if (check != state->peerCheck) {
 			if (requestNonceFailedHook)
@@ -131,7 +154,7 @@ void PairingServiceBase::handle(Context & ctx)
 
 		if (requestHook) {
 			string confirm = confirmationNumber(nonceDigest(
-				*pid, ctx.peer().server().identity(),
+				*state->idReq, *state->idRsp,
 				*reqnonce, state->nonce));
 			std::thread(&PairingServiceBase::waitForConfirmation,
 					this, ctx.peer(), state, confirm, requestHook).detach();
@@ -174,25 +197,29 @@ void PairingServiceBase::requestPairing(UUID serviceId, const Peer & peer)
 	}
 
 	state->phase = StatePhase::OurRequest;
+	state->idReq = peer.server().identity();
+	state->idRsp = pid;
 	state->nonce.resize(32);
 	RAND_bytes(state->nonce.data(), state->nonce.size());
 
 	vector<Record::Item> items;
+	items.emplace_back("id-req", state->idReq->ref().value());
+	items.emplace_back("id-rsp", state->idRsp->ref().value());
 	items.emplace_back("request", nonceDigest(
-				peer.server().identity(), *pid,
+				*state->idReq, *state->idRsp,
 				state->nonce, vector<uint8_t>()));
 
 	peer.send(serviceId, Object(Record(std::move(items))));
 }
 
-vector<uint8_t> PairingServiceBase::nonceDigest(const Identity & id1, const Identity & id2,
-	const vector<uint8_t> & nonce1, const vector<uint8_t> & nonce2)
+vector<uint8_t> PairingServiceBase::nonceDigest(const Identity & idReq, const Identity & idRsp,
+	const vector<uint8_t> & nonceReq, const vector<uint8_t> & nonceRsp)
 {
 	vector<Record::Item> items;
-	items.emplace_back("id", id1.ref().value());
-	items.emplace_back("id", id2.ref().value());
-	items.emplace_back("nonce", nonce1);
-	items.emplace_back("nonce", nonce2);
+	items.emplace_back("id-req", idReq.ref().value());
+	items.emplace_back("id-rsp", idRsp.ref().value());
+	items.emplace_back("nonce-req", nonceReq);
+	items.emplace_back("nonce-rsp", nonceRsp);
 
 	const auto arr = Digest::of(Object(Record(std::move(items)))).arr();
 	vector<uint8_t> ret(arr.size());
