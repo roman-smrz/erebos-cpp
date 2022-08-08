@@ -979,6 +979,56 @@ const Storage & Ref::storage() const
 	return *static_cast<const Storage*>(p->storage.get());
 }
 
+vector<Ref> Ref::previous() const
+{
+	auto rec = (**this).asRecord();
+	if (!rec)
+		return {};
+
+	vector<Ref> res;
+
+	auto sdata = rec->item("SDATA").asRef();
+	if (sdata) {
+		auto drec = sdata.value()->asRecord();
+		if (!drec)
+			return {};
+
+		for (const Record::Item & i : drec->items("SPREV"))
+			if (auto x = i.asRef())
+				res.push_back(*x);
+		return res;
+	}
+
+	for (const Record::Item & i : rec->items("PREV"))
+		if (auto x = i.asRef())
+			res.push_back(*x);
+	return res;
+}
+
+Generation Ref::generation() const
+{
+	scoped_lock lock(p->storage->p->generationCacheLock);
+	return generationLocked();
+}
+
+Generation Ref::generationLocked() const
+{
+	auto it = p->storage->p->generationCache.find(p->digest);
+	if (it != p->storage->p->generationCache.end())
+		return it->second;
+
+	auto prev = previous();
+	vector<Generation> pgen;
+	pgen.reserve(prev.size());
+	for (const auto & r : prev)
+		pgen.push_back(r.generationLocked());
+
+	auto gen = Generation::next(pgen);
+
+	p->storage->p->generationCache.emplace(p->digest, gen);
+	return gen;
+}
+
 
 template<class S>
 RecordT<S>::Item::operator bool() const
@@ -1365,6 +1415,25 @@ optional<Blob> ObjectT<S>::asBlob() const
 
 template class erebos::ObjectT<Storage>;
 template class erebos::ObjectT<PartialStorage>;
+
+
+Generation::Generation(): Generation(0) {}
+Generation::Generation(size_t g): gen(g) {}
+
+Generation Generation::next(const vector<Generation> & prev)
+{
+	Generation ret;
+	for (const auto g : prev)
+		if (ret.gen <= g.gen)
+			ret.gen = g.gen + 1;
+	return ret;
+}
+
+Generation::operator string() const
+{
+	return to_string(gen);
+}
+
 
 vector<Stored<Object>> erebos::collectStoredObjects(const Stored<Object> & from)
 {

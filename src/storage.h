@@ -164,6 +164,9 @@ struct PartialStorage::Priv
 	optional<Digest> copy(const typename S::Ref &, vector<Digest> *) const;
 	template<class S>
 	optional<Digest> copy(const ObjectT<S> &, vector<Digest> *) const;
+
+	mutable mutex generationCacheLock {};
+	mutable unordered_map<Digest, Generation> generationCache {};
 };
 
 struct PartialRef::Priv

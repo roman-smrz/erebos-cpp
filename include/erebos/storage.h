@@ -41,6 +41,8 @@ using std::bind;
 using std::call_once;
 using std::make_unique;
 using std::move;
+using std::string;
+using std::vector;
 
 class PartialStorage
 {
@@ -68,6 +70,10 @@ protected:
 	struct Priv;
 	const std::shared_ptr<const Priv> p;
 	PartialStorage(const std::shared_ptr<const Priv> & p): p(p) {}
+
+public:
+	// For test usage
+	const Priv & priv() const { return *p; }
 };
 
 class Storage : public PartialStorage
@@ -199,6 +205,12 @@ public:
 	std::unique_ptr<Object> operator->() const;
 
 	const Storage & storage() const;
+
+	vector<Ref> previous() const;
+	class Generation generation() const;
+
+private:
+	class Generation generationLocked() const;
 
 protected:
 	Ref(const std::shared_ptr<const Priv> p): PartialRef(p) {}
@@ -349,6 +361,19 @@ std::optional<Stored<T>> RecordT<S>::Item::as() const
 	return std::nullopt;
 }
 
+class Generation
+{
+public:
+	Generation();
+	static Generation next(const vector<Generation> &);
+
+	explicit operator string() const;
+
+private:
+	Generation(size_t);
+	size_t gen;
+};
+
 template<typename T>
 class Stored
 {
@@ -381,6 +406,8 @@ public:
 	void init() const;
 	const T & operator*() const { init(); return *p->val; }
 	const T * operator->() const { init(); return p->val.get(); }
+
+	Generation generation() const { return p->ref.generation(); }
 
 	std::vector<Stored<T>> previous() const;
 	bool precedes(const Stored<T> &) const;
@@ -448,27 +475,11 @@ Ref Stored<T>::store(const Storage & st) const
 template<typename T>
 std::vector<Stored<T>> Stored<T>::previous() const
 {
-	auto rec = p->ref->asRecord();
-	if (!rec)
-		return {};
-
-	auto sdata = rec->item("SDATA").asRef();
-	if (sdata) {
-		auto drec = sdata.value()->asRecord();
-		if (!drec)
-			return {};
-
-		std::vector<Stored<T>> res;
-		for (const Record::Item & i : drec->items("SPREV"))
-			if (auto x = i.as<T>())
-				res.push_back(*x);
-		return res;
-	}
-
-	std::vector<Stored<T>> res;
-	for (const Record::Item & i : rec->items("PREV"))
-		if (auto x = i.as<T>())
-			res.push_back(*x);
+	auto refs = p->ref.previous();
+	vector<Stored<T>> res;
+	res.reserve(refs.size());
+	for (const auto & r : refs)
+		res.push_back(Stored<T>::load(r));
 	return res;
 }
 

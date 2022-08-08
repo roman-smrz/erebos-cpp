@@ -4,6 +4,8 @@
 #include <erebos/storage.h>
 #include <erebos/sync.h>
 
+#include "storage.h"
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -37,6 +39,7 @@ using std::promise;
 using std::scoped_lock;
 using std::string;
 using std::thread;
+using std::to_string;
 using std::unique_ptr;
 using std::vector;
 
@@ -103,6 +106,48 @@ struct Command
 	string name;
 	function<void(const vector<string> &)> action;
 };
+
+void store(const vector<string> & args)
+{
+	auto type = args.at(0);
+
+	vector<uint8_t> inner, data;
+
+	char * line = nullptr;
+	size_t size = 0;
+
+	while (getline(&line, &size, stdin) > 0 && strlen(line) > 1)
+		copy(line, line + strlen(line), std::back_inserter(inner));
+
+	free(line);
+
+	auto inserter = std::back_inserter(data);
+	copy(type.begin(), type.end(), inserter);
+	inserter = ' ';
+
+	auto slen = to_string(inner.size());
+	copy(slen.begin(), slen.end(), inserter);
+	inserter = '\n';
+
+	copy(inner.begin(), inner.end(), inserter);
+
+	auto digest = st.priv().storeBytes(data);
+
+	ostringstream ss;
+	ss << "store-done " << string(digest);
+	printLine(ss.str());
+}
+
+void storedGeneration(const vector<string> & args)
+{
+	auto ref = st.ref(Digest(args.at(0)));
+	if (!ref)
+		throw invalid_argument("ref " + args.at(0) + " not found");
+
+	ostringstream ss;
+	ss << "stored-generation " << string(ref->digest()) << " " << string(ref->generation());
+	printLine(ss.str());
+}
 
 void createIdentity(const vector<string> & args)
 {
@@ -292,6 +337,8 @@ void attachReject(const vector<string> & params)
 }
 
 vector<Command> commands = {
+	{ "store", store },
+	{ "stored-generation", storedGeneration },
 	{ "create-identity", createIdentity },
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },
