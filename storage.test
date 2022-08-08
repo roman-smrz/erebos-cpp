@@ -1,0 +1,75 @@
+test:
+	spawn on node1 as p1
+
+	# Diamond history
+	send to p1:
+		"store rec"
+		"text:t First root"
+		""
+	expect from p1:
+		/store-done (blake2#[0-9a-f]*)/ capture r1
+	guard r1 == "blake2#c4a8c69fbc8398acf76a2ec1e5a191f339c4d03c3eb425af19d6d7d5efac6b8e"
+
+	send to p1:
+		"store rec"
+		"PREV:r $r1"
+		""
+	expect from p1:
+		/store-done (blake2#[0-9a-f]*)/ capture r2
+
+	send to p1:
+		"store rec"
+		"text:t Second branch"
+		"PREV:r $r1"
+		""
+	expect from p1:
+		/store-done (blake2#[0-9a-f]*)/ capture r3
+
+	send to p1:
+		"store rec"
+		"PREV:r $r2"
+		"PREV:r $r3"
+		""
+	expect from p1:
+		/store-done (blake2#[0-9a-f]*)/ capture r4
+
+	send to p1 "stored-generation $r1"
+	expect from p1 /stored-generation $r1 0/
+
+	send to p1 "stored-generation $r2"
+	expect from p1 /stored-generation $r2 1/
+
+	send to p1 "stored-generation $r3"
+	expect from p1 /stored-generation $r3 1/
+
+	send to p1 "stored-generation $r4"
+	expect from p1 /stored-generation $r4 2/
+
+	# Attach second root
+	send to p1:
+		"store rec"
+		"text:t Second root"
+		""
+	expect from p1:
+		/store-done (blake2#[0-9a-f]*)/ capture r2_1
+
+	send to p1:
+		"store rec"
+		"PREV:r $r2_1"
+		""
+	expect from p1:
+		/store-done (blake2#[0-9a-f]*)/ capture r2_2
+
+	send to p1:
+		"store rec"
+		"PREV:r $r2_2"
+		"PREV:r $r4"
+		""
+	expect from p1:
+		/store-done (blake2#[0-9a-f]*)/ capture r2_3
+
+	send to p1 "stored-generation $r2_3"
+	expect from p1 /stored-generation $r2_3 3/
+
+	send to p1 "stored-generation $r2_2"
+	expect from p1 /stored-generation $r2_2 1/
