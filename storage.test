@@ -45,6 +45,18 @@ test:
 	send to p1 "stored-generation $r4"
 	expect from p1 /stored-generation $r4 2/
 
+	send to p1 "stored-roots $r1"
+	expect from p1 /stored-roots $r1 $r1/
+
+	send to p1 "stored-roots $r2"
+	expect from p1 /stored-roots $r2 $r1/
+
+	send to p1 "stored-roots $r3"
+	expect from p1 /stored-roots $r3 $r1/
+
+	send to p1 "stored-roots $r4"
+	expect from p1 /stored-roots $r4 $r1/
+
 	# Attach second root
 	send to p1:
 		"store rec"
@@ -73,3 +85,9 @@ test:
 
 	send to p1 "stored-generation $r2_2"
 	expect from p1 /stored-generation $r2_2 1/
+
+	send to p1 "stored-roots $r2_3"
+	expect from p1 /stored-roots $r2_3 $r2_1 $r1/
+
+	send to p1 "stored-roots $r2_2"
+	expect from p1 /stored-roots $r2_2 $r2_1/
