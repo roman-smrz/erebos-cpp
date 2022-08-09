@@ -1029,6 +1029,34 @@ Generation Ref::generationLocked() const
 	return gen;
 }
 
+vector<Digest> Ref::roots() const
+{
+	scoped_lock lock(p->storage->p->rootsCacheLock);
+	return rootsLocked();
+}
+
+vector<Digest> Ref::rootsLocked() const
+{
+	auto it = p->storage->p->rootsCache.find(p->digest);
+	if (it != p->storage->p->rootsCache.end())
+		return it->second;
+
+	vector<Digest> roots;
+	auto prev = previous();
+
+	if (prev.empty()) {
+		roots.push_back(p->digest);
+	} else {
+		for (const auto & p : previous())
+			for (const auto & r : p.rootsLocked())
+				roots.push_back(r);
+
+		std::sort(roots.begin(), roots.end());
+		roots.erase(std::unique(roots.begin(), roots.end()), roots.end());
+	}
+	return roots;
+}
+
 
 template<class S>
 RecordT<S>::Item::operator bool() const

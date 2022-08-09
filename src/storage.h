@@ -167,6 +167,9 @@ struct PartialStorage::Priv
 
 	mutable mutex generationCacheLock {};
 	mutable unordered_map<Digest, Generation> generationCache {};
+
+	mutable mutex rootsCacheLock {};
+	mutable unordered_map<Digest, vector<Digest>> rootsCache {};
 };
 
 struct PartialRef::Priv

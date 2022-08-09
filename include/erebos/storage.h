@@ -208,9 +208,11 @@ public:
 
 	vector<Ref> previous() const;
 	class Generation generation() const;
+	vector<Digest> roots() const;
 
 private:
 	class Generation generationLocked() const;
+	class vector<Digest> rootsLocked() const;
 
 protected:
 	Ref(const std::shared_ptr<const Priv> p): PartialRef(p) {}
@@ -411,6 +413,8 @@ public:
 
 	std::vector<Stored<T>> previous() const;
 	bool precedes(const Stored<T> &) const;
+
+	std::vector<Digest> roots() const { return p->ref.roots(); }
 
 	const Ref & ref() const { return p->ref; }
 

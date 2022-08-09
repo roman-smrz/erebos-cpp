@@ -149,6 +149,19 @@ void storedGeneration(const vector<string> & args)
 	printLine(ss.str());
 }
 
+void storedRoots(const vector<string> & args)
+{
+	auto ref = st.ref(Digest(args.at(0)));
+	if (!ref)
+		throw invalid_argument("ref " + args.at(0) + " not found");
+
+	ostringstream ss;
+	ss << "stored-roots " << string(ref->digest());
+	for (const auto & dgst : ref->roots())
+		ss << " " << string(dgst);
+	printLine(ss.str());
+}
+
 void createIdentity(const vector<string> & args)
 {
 	optional<Identity> identity;
@@ -339,6 +352,7 @@ void attachReject(const vector<string> & params)
 vector<Command> commands = {
 	{ "store", store },
 	{ "stored-generation", storedGeneration },
+	{ "stored-roots", storedRoots },
 	{ "create-identity", createIdentity },
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },
