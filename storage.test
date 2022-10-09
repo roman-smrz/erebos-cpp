@@ -1,6 +1,9 @@
 test:
 	spawn on node1 as p1
 
+	# Root finding
+	###############
+
 	# Diamond history
 	send to p1:
 		"store rec"
@@ -91,3 +94,59 @@ test:
 
 	send to p1 "stored-roots $r2_2"
 	expect from p1 /stored-roots $r2_2 $r2_1/
+
+
+	# Set
+	#####
+
+	send to p1 "stored-set-add $r1"
+	expect from p1 /stored-set-add (blake2#[0-9a-f]*)/ capture s1
+	send to p1 "stored-set-add $r2 $s1"
+	expect from p1 /stored-set-add (blake2#[0-9a-f]*)/ capture s2
+	send to p1 "stored-set-add $r3 $s2"
+	expect from p1 /stored-set-add (blake2#[0-9a-f]*)/ capture s3
+	send to p1 "stored-set-add $r4 $s3"
+	expect from p1 /stored-set-add (blake2#[0-9a-f]*)/ capture s4
+
+	send to p1 "stored-set-list $s1"
+	expect from p1:
+		/stored-set-item $r1/
+		/stored-set-(.*)/ capture done1
+	guard done1 == "done"
+
+	send to p1 "stored-set-list $s2"
+	expect from p1:
+		/stored-set-item $r2/
+		/stored-set-(.*)/ capture done2
+	guard done2 == "done"
+
+	send to p1 "stored-set-list $s3"
+	expect from p1:
+		/stored-set-item $r2 $r3/
+		/stored-set-(.*)/ capture done3
+	guard done3 == "done"
+
+	send to p1 "stored-set-list $s4"
+	expect from p1:
+		/stored-set-item $r4/
+		/stored-set-(.*)/ capture done4
+	guard done4 == "done"
+
+
+	send to p1 "stored-set-add $r2_2 $s4"
+	expect from p1 /stored-set-add (blake2#[0-9a-f]*)/ capture s5
+	send to p1 "stored-set-add $r2_3 $s5"
+	expect from p1 /stored-set-add (blake2#[0-9a-f]*)/ capture s6
+
+	send to p1 "stored-set-list $s5"
+	expect from p1:
+		/stored-set-item $r4/
+		/stored-set-item $r2_2/
+		/stored-set-(.*)/ capture done5
+	guard done5 == "done"
+
+	send to p1 "stored-set-list $s6"
+	expect from p1:
+		/stored-set-item $r2_3/
+		/stored-set-(.*)/ capture done6
+	guard done6 == "done"
