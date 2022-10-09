@@ -1,6 +1,7 @@
 #include <erebos/attach.h>
 #include <erebos/identity.h>
 #include <erebos/network.h>
+#include <erebos/set.h>
 #include <erebos/storage.h>
 #include <erebos/sync.h>
 
@@ -160,6 +161,39 @@ void storedRoots(const vector<string> & args)
 	for (const auto & dgst : ref->roots())
 		ss << " " << string(dgst);
 	printLine(ss.str());
+}
+
+void storedSetAdd(const vector<string> & args)
+{
+	auto iref = st.ref(Digest(args.at(0)));
+	if (!iref)
+		throw invalid_argument("ref " + args.at(0) + " not found");
+
+	auto set = args.size() > 1 ?
+		Set<vector<Stored<Object>>>::load({ *st.ref(Digest(args.at(1))) }) :
+		Set<vector<Stored<Object>>>();
+
+	ostringstream ss;
+	ss << "stored-set-add";
+	for (const auto & d : set.add(st, { Stored<Object>::load(*iref) }).digests())
+		ss << " " << string(d);
+	printLine(ss.str());
+}
+
+void storedSetList(const vector<string> & args)
+{
+	auto ref = st.ref(Digest(args.at(0)));
+	if (!ref)
+		throw invalid_argument("ref " + args.at(0) + " not found");
+
+	for (const auto & vec : Set<vector<Stored<Object>>>::load({ *ref }).view(std::less{})) {
+		ostringstream ss;
+		ss << "stored-set-item";
+		for (const auto & x : vec)
+			ss << " " << string(x.ref().digest());
+		printLine(ss.str());
+	}
+	printLine("stored-set-done");
 }
 
 void createIdentity(const vector<string> & args)
@@ -353,6 +387,8 @@ vector<Command> commands = {
 	{ "store", store },
 	{ "stored-generation", storedGeneration },
 	{ "stored-roots", storedRoots },
+	{ "stored-set-add", storedSetAdd },
+	{ "stored-set-list", storedSetList },
 	{ "create-identity", createIdentity },
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },

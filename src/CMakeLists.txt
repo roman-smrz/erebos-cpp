@@ -13,6 +13,7 @@ add_library(erebos
 	pairing.cpp
 	pubkey.cpp
 	service.cpp
+	set.cpp
 	state.cpp
 	storage.cpp
 	sync.cpp

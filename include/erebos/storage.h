@@ -668,6 +668,16 @@ WatchedHead<T>::~WatchedHead()
 				T::headTypeId, Head<T>::id(), watcherId);
 }
 
+template<class T>
+vector<Ref> storedRefs(const vector<Stored<T>> & v)
+{
+	vector<Ref> res;
+	res.reserve(v.size());
+	for (const auto & x : v)
+		res.push_back(x.ref());
+	return res;
+}
+
 }
 
 namespace std
