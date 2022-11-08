@@ -270,31 +270,34 @@ void startServer(const vector<string> &)
 
 	server->peerList().onUpdate([](size_t idx, const Peer * peer) {
 		size_t i = 0;
-		while (idx > 0 && i < testPeers.size() && testPeers[i].deleted) {
+		while (idx > 0 && i < testPeers.size()) {
 			if (!testPeers[i].deleted)
 				idx--;
 			i++;
 		}
 
-		ostringstream ss;
-		ss << "peer " << i + 1;
+		string prefix = "peer " + to_string(i + 1);
 		if (peer) {
-			if (i >= testPeers.size())
+			if (i >= testPeers.size()) {
 				testPeers.push_back(TestPeer { .peer = *peer, .id = i + 1 });
+				const auto & paddr = peer->address();
+
+				ostringstream ss;
+				ss << prefix << " addr " << inet_ntoa(paddr.sin_addr) << " " << ntohs(paddr.sin_port);
+				printLine(ss.str());
+			}
 
 			if (peer->identity()) {
-				ss << " id";
+				ostringstream ss;
+				ss << prefix << " id";
 				for (auto idt = peer->identity(); idt; idt = idt->owner())
 					ss << " " << (idt->name() ? *idt->name() : "<unnamed>");
-			} else {
-				const auto & paddr = peer->address();
-				ss << " addr " << inet_ntoa(paddr.sin_addr) << " " << ntohs(paddr.sin_port);
+				printLine(ss.str());
 			}
 		} else {
 			testPeers[i].deleted = true;
-			ss << " deleted";
+			printLine(prefix + " deleted");
 		}
-		printLine(ss.str());
 	});
 }
 
