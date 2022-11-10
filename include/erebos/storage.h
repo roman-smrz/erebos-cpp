@@ -657,7 +657,8 @@ WatchedHead<T> Head<T>::watch(const std::function<void(const Head<T> &)> & watch
 template<typename T>
 Bhv<T> Head<T>::behavior() const
 {
-	return make_shared<HeadBhv<T>>(*this);
+	auto cur = ref().storage().template head<T>(id());
+	return make_shared<HeadBhv<T>>(cur ? *cur : *this);
 }
 
 template<class T>
