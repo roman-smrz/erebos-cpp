@@ -306,6 +306,44 @@ void stopServer(const vector<string> &)
 	server.reset();
 }
 
+void sharedStateGet(const vector<string> &)
+{
+	ostringstream ss;
+	ss << "shared-state-get";
+	for (const auto & r : h->behavior().lens<vector<Ref>>().get())
+		ss << " " << string(r.digest());
+	printLine(ss.str());
+}
+
+void sharedStateWait(const vector<string> & args)
+{
+	static optional<Watched<vector<Ref>>> watched;
+	watched = h->behavior().lens<vector<Ref>>().watch([args, watched = watched] (const vector<Ref> & refs) mutable {
+		vector<Stored<Object>> objs;
+		objs.reserve(refs.size());
+		for (const auto & r : refs)
+			objs.push_back(Stored<Object>::load(r));
+
+		auto objs2 = objs;
+		for (const auto & a : args)
+			if (auto ref = st.ref(Digest(a)))
+				objs2.push_back(Stored<Object>::load(*ref));
+			else
+				return;
+
+		filterAncestors(objs2);
+		if (objs2 == objs) {
+			ostringstream ss;
+			ss << "shared-state-wait";
+			for (const auto & a : args)
+				ss << " " << a;
+			printLine(ss.str());
+
+			watched = std::nullopt;
+		}
+	});
+}
+
 void watchLocalIdentity(const vector<string> &)
 {
 	auto bhv = h->behavior().lens<optional<Identity>>();
@@ -395,6 +433,8 @@ vector<Command> commands = {
 	{ "create-identity", createIdentity },
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },
+	{ "shared-state-get", sharedStateGet },
+	{ "shared-state-wait", sharedStateWait },
 	{ "watch-local-identity", watchLocalIdentity },
 	{ "watch-shared-identity", watchSharedIdentity },
 	{ "update-local-identity", updateLocalIdentity },
