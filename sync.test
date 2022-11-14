@@ -43,3 +43,8 @@ test:
 	send "update-shared-identity NewOwner3" to p1
 	expect /shared-identity NewOwner3/ from p1
 	expect /shared-identity NewOwner3/ from p2
+
+	send "shared-state-get" to p1
+	expect /shared-state-get (.*)/ from p1 capture p1state
+	send "shared-state-wait $p1state" to p2
+	expect /shared-state-wait $p1state/ from p2
