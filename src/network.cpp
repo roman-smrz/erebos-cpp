@@ -211,6 +211,13 @@ Peer PeerList::at(size_t i) const
 
 void PeerList::onUpdate(function<void(size_t, const Peer *)> w)
 {
+	scoped_lock lock(p->dataMutex);
+	for (size_t i = 0; i < p->peers.size(); i++) {
+		if (auto speer = p->peers[i]->speer.lock()) {
+			Peer peer(speer->lpeer);
+			w(i, &peer);
+		}
+	}
 	p->watchers.push_back(w);
 }
 
