@@ -1,6 +1,6 @@
 test:
-	spawn on node1 as p1
-	spawn on node2 as p2
+	spawn as p1
+	spawn as p2
 	send "create-identity Device1 Owner" to p1
 	send "create-identity Device2" to p2
 	send "watch-local-identity" to p1
@@ -9,11 +9,11 @@ test:
 	send "start-server" to p2
 	expect from p1:
 		/local-identity Device1 Owner/
-		/peer 1 addr ${node2.ip} 29665/
+		/peer 1 addr ${p2.node.ip} 29665/
 		/peer 1 id Device2/
 	expect from p2:
 		/local-identity Device2/
-		/peer 1 addr ${node1.ip} 29665/
+		/peer 1 addr ${p1.node.ip} 29665/
 		/peer 1 id Device1 Owner/
 
 	send "attach-to 1" to p2
