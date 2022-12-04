@@ -1,5 +1,5 @@
 test:
-	spawn on node1 as p1
+	spawn as p1
 
 	# Root finding
 	###############
