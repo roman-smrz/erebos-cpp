@@ -147,7 +147,9 @@ void PairingServiceBase::handle(Context & ctx)
 				requestNonceFailedHook(ctx.peer());
 			if (state->phase < StatePhase::PairingDone) {
 				state->phase = StatePhase::PairingFailed;
-				state->outcome.set_value(Outcome::NonceMismatch);
+				ctx.afterCommit([&]() {
+					state->outcome.set_value(Outcome::NonceMismatch);
+				});
 			}
 			return;
 		}
@@ -166,7 +168,9 @@ void PairingServiceBase::handle(Context & ctx)
 	else if (auto reject = rec->item("reject").asText()) {
 		if (state->phase < StatePhase::PairingDone) {
 			state->phase = StatePhase::PairingFailed;
-			state->outcome.set_value(Outcome::PeerRejected);
+			ctx.afterCommit([&]() {
+				state->outcome.set_value(Outcome::PeerRejected);
+			});
 		}
 	}
 
@@ -174,7 +178,9 @@ void PairingServiceBase::handle(Context & ctx)
 		if (state->phase == StatePhase::OurRequestReady) {
 			handlePairingResult(ctx);
 			state->phase = StatePhase::PairingDone;
-			state->outcome.set_value(Outcome::Success);
+			ctx.afterCommit([&]() {
+				state->outcome.set_value(Outcome::Success);
+			});
 		} else {
 			result = ctx.ref();
 		}

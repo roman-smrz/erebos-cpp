@@ -703,8 +703,10 @@ void Server::Peer::updateService(ReplyBuilder & reply)
 	for (auto & x : serviceQueue) {
 		if (auto ref = std::get<1>(x)->check(reply)) {
 			if (lpeer) {
+				Service::Context ctx { nullptr };
+
 				server.localHead.update([&] (const Stored<LocalState> & local) {
-					Service::Context ctx(new Service::Context::Priv {
+					ctx = Service::Context(new Service::Context::Priv {
 						.ref = *ref,
 						.peer = erebos::Peer(lpeer),
 						.local = local,
@@ -719,6 +721,8 @@ void Server::Peer::updateService(ReplyBuilder & reply)
 
 					return ctx.local();
 				});
+
+				ctx.runAfterCommitHooks();
 			}
 		} else {
 			next.push_back(std::move(x));

@@ -26,6 +26,9 @@ public:
 		const Stored<LocalState> & local() const;
 		void local(const LocalState &);
 
+		void afterCommit(function<void()>);
+		void runAfterCommitHooks() const;
+
 	private:
 		std::unique_ptr<Priv> p;
 	};

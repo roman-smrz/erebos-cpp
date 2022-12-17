@@ -34,6 +34,17 @@ void Service::Context::local(const LocalState & ls)
 	p->local = p->local.ref().storage().store(ls);
 }
 
+void Service::Context::afterCommit(function<void()> hook)
+{
+	p->afterCommit.push_back(move(hook));
+}
+
+void Service::Context::runAfterCommitHooks() const
+{
+	for (const auto & hook : p->afterCommit)
+		hook();
+}
+
 void Service::serverStarted(const class Server &)
 {
 }
