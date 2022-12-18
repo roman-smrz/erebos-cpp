@@ -60,6 +60,7 @@ public:
 	template<class F>
 	SetView(F && cmp, const vector<vector<Ref>> & refs);
 
+	size_t size() const { return items.size(); }
 	typename vector<T>::const_iterator begin() const { return items.begin(); }
 	typename vector<T>::const_iterator end() const { return items.end(); }
 
