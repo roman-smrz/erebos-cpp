@@ -547,6 +547,7 @@ public:
 	const Stored<T> & stored() const { return mstored; }
 	const Ref & ref() const { return mstored.ref(); }
 
+	optional<Head<T>> reload() const;
 	std::optional<Head<T>> update(const std::function<Stored<T>(const Stored<T> &)> &) const;
 	WatchedHead<T> watch(const std::function<void(const Head<T> &)> &) const;
 
@@ -632,6 +633,12 @@ Head<T> Storage::storeHead(const Stored<T> & val) const
 }
 
 template<typename T>
+optional<Head<T>> Head<T>::reload() const
+{
+	return ref().storage().template head<T>(id());
+}
+
+template<typename T>
 std::optional<Head<T>> Head<T>::update(const std::function<Stored<T>(const Stored<T> &)> & f) const
 {
 	auto res = Storage::updateHead(T::headTypeId, mid, ref(), [&f, this](const Ref & r) {
@@ -657,7 +664,7 @@ WatchedHead<T> Head<T>::watch(const std::function<void(const Head<T> &)> & watch
 template<typename T>
 Bhv<T> Head<T>::behavior() const
 {
-	auto cur = ref().storage().template head<T>(id());
+	auto cur = reload();
 	return make_shared<HeadBhv<T>>(cur ? *cur : *this);
 }
 
