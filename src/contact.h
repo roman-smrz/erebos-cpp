@@ -19,24 +19,12 @@ struct IdentityData;
 struct Contact::Priv
 {
 	vector<Stored<ContactData>> data;
-	Identity identity;
 
 	void init();
 	std::once_flag initFlag {};
 
+	optional<Identity> identity {};
 	optional<string> name {};
-
-	static List<Contact> loadList(vector<Stored<ContactData>> &&, vector<Identity> &&);
-};
-
-struct ContactData
-{
-	static ContactData load(const Ref &);
-	Ref store(const Storage &) const;
-
-	vector<Stored<ContactData>> prev;
-	vector<Stored<Signed<IdentityData>>> identity;
-	optional<string> name;
 };
 
 }

@@ -17,13 +17,17 @@ protected:
 	SetBase();
 	SetBase(const vector<Ref> &);
 	SetBase(shared_ptr<const Priv>);
-	
-	shared_ptr<const Priv> add(Storage &, const vector<Ref> &) const;
+
+	shared_ptr<const Priv> add(const Storage &, const vector<Ref> &) const;
 
 	vector<vector<Ref>> toList() const;
 
 public:
+	bool operator==(const SetBase &) const;
+	bool operator!=(const SetBase &) const;
+
 	vector<Digest> digests() const;
+	vector<Ref> store() const;
 
 protected:
 	shared_ptr<const Priv> p;
@@ -43,7 +47,7 @@ public:
 
 	static Set<T> load(const vector<Ref> & refs) { return Set<T>(move(refs)); }
 
-	Set<T> add(Storage &, const T &) const;
+	Set<T> add(const Storage &, const T &) const;
 
 	template<class F>
 	SetView<T> view(F && cmp) const;
@@ -64,7 +68,7 @@ private:
 };
 
 template<class T>
-Set<T> Set<T>::add(Storage & st, const T & x) const
+Set<T> Set<T>::add(const Storage & st, const T & x) const
 {
 	return Set<T>(SetBase::add(st, storedRefs(Mergeable<T>::components(x))));
 }

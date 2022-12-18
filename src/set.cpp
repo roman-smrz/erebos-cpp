@@ -32,7 +32,7 @@ SetBase::SetBase(shared_ptr<const Priv> p_):
 {
 }
 
-shared_ptr<const SetBase::Priv> SetBase::add(Storage & st, const vector<Ref> & refs) const
+shared_ptr<const SetBase::Priv> SetBase::add(const Storage & st, const vector<Ref> & refs) const
 {
 	auto item = st.store(SetItem {
 		.prev = p->items,
@@ -122,12 +122,31 @@ vector<vector<Ref>> SetBase::toList() const
 	return res;
 }
 
+bool SetBase::operator==(const SetBase & other) const
+{
+	return p->items == other.p->items;
+}
+
+bool SetBase::operator!=(const SetBase & other) const
+{
+	return !(*this == other);
+}
+
 vector<Digest> SetBase::digests() const
 {
 	vector<Digest> res;
 	res.reserve(p->items.size());
 	for (const auto & i : p->items)
 		res.push_back(i.ref().digest());
+	return res;
+}
+
+vector<Ref> SetBase::store() const
+{
+	vector<Ref> res;
+	res.reserve(p->items.size());
+	for (const auto & i : p->items)
+		res.push_back(i.ref());
 	return res;
 }
 

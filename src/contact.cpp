@@ -6,40 +6,42 @@ using namespace erebos;
 
 using std::move;
 
-DEFINE_SHARED_TYPE(List<Contact>,
+DEFINE_SHARED_TYPE(Set<Contact>,
 		"34fbb61e-6022-405f-b1b3-a5a1abecd25e",
-		&Contact::loadList,
-		[](const List<Contact> & list) {
-			if (list.empty())
-				return vector<Ref>();
-			return list.front().refs();
+		&Set<Contact>::load,
+		[](const Set<Contact> & set) {
+			return set.store();
 		})
 
+static const UUID serviceUUID("d9c37368-0da1-4280-93e9-d9bd9a198084");
 
-List<Contact> Contact::prepend(const Storage & st, Identity id, List<Contact> list)
+Contact::Contact(vector<Stored<ContactData>> data):
+	p(shared_ptr<Priv>(new Priv {
+		.data = data,
+	}))
 {
-	auto cd = st.store(ContactData {
-		.prev = list.empty() ? vector<Stored<ContactData>>() : list.front().p->data,
-		.identity = id.data(),
-		.name = nullopt,
-	});
-	return list.push_front(
-			Contact(shared_ptr<Priv>(new Priv {
-				.data = { cd },
-				.identity = move(id),
-			}))
-	);
 }
 
-Identity Contact::identity() const
+optional<Identity> Contact::identity() const
 {
+	p->init();
 	return p->identity;
 }
 
-optional<string> Contact::name() const
+optional<string> Contact::customName() const
 {
 	p->init();
 	return p->name;
+}
+
+string Contact::name() const
+{
+	if (auto cust = customName())
+		return *cust;
+	if (auto id = p->identity)
+		if (auto idname = id->name())
+			return *idname;
+	return "";
 }
 
 bool Contact::operator==(const Contact & other) const
@@ -52,66 +54,18 @@ bool Contact::operator!=(const Contact & other) const
 	return p->data != other.p->data;
 }
 
-List<Contact> Contact::loadList(const vector<Ref> & refs)
+vector<Stored<ContactData>> Contact::data() const
 {
-	vector<Stored<ContactData>> cdata;
-	cdata.reserve(refs.size());
-
-	for (const auto & r : refs)
-		cdata.push_back(Stored<ContactData>::load(r));
-	return Priv::loadList(move(cdata), {});
-}
-
-List<Contact> Contact::Priv::loadList(vector<Stored<ContactData>> && cdata, vector<Identity> && seen)
-{
-	if (cdata.empty())
-		return {};
-
-	filterAncestors(cdata);
-
-	for (size_t i = 0; i < cdata.size(); i++) {
-		auto id = Identity::load(cdata[i]->identity);
-		if (!id)
-			continue;
-
-		bool skip = false;
-		for (const auto & sid : seen) {
-			if (id->sameAs(sid)) {
-				skip = true;
-				break;
-			}
-		}
-		if (skip)
-			continue;
-
-		vector<Stored<ContactData>> next;
-		next.reserve(cdata.size() - i - 1 + cdata[i]->prev.size());
-		for (size_t j = i + 1; j < cdata.size(); j++)
-			next.push_back(cdata[j]);
-		for (const auto & x : cdata[i]->prev)
-			next.push_back(x);
-
-		seen.push_back(*id);
-		auto p = shared_ptr<Priv>(new Priv { .data = move(cdata), .identity = move(*id) });
-		return List(Contact(p), loadList(move(next), move(seen)));
-	}
-
-	return {};
-}
-
-vector<Ref> Contact::refs() const
-{
-	vector<Ref> res;
-	res.reserve(p->data.size());
-	for (const auto & x : p->data)
-		res.push_back(x.ref());
-	return res;
+	return p->data;
 }
 
 void Contact::Priv::init()
 {
 	std::call_once(initFlag, [this]() {
-		name = identity.name();
+		// TODO: property lookup
+		identity = Identity::load(data[0]->identity);
+		if (identity)
+			name = identity->name();
 	});
 }
 
@@ -149,5 +103,76 @@ Ref ContactData::store(const Storage & st) const
 	if (name)
 		items.emplace_back("name", *name);
 
+	return st.storeObject(Record(std::move(items)));
+}
+
+ContactService::ContactService() = default;
+ContactService::~ContactService() = default;
+
+UUID ContactService::uuid() const
+{
+	return serviceUUID;
+}
+
+void ContactService::serverStarted(const Server & s)
+{
+	PairingService<ContactAccepted>::serverStarted(s);
+	server = &s;
+}
+
+void ContactService::request(const Peer & peer)
+{
+	requestPairing(serviceUUID, peer);
+}
+
+Stored<ContactAccepted> ContactService::handlePairingComplete(const Peer & peer)
+{
+	server->localHead().update([&] (const Stored<LocalState> & local) {
+		auto cdata = local.ref().storage().store(ContactData {
+			.prev = {},
+			.identity = peer.identity()->finalOwner().data(),
+			.name = std::nullopt,
+		});
+
+		Contact contact(shared_ptr<Contact::Priv>(new Contact::Priv {
+			.data = { cdata },
+		}));
+
+		auto contacts = local->shared<Set<Contact>>();
+
+		return local.ref().storage().store(local->shared<Set<Contact>>(
+			contacts.add(local.ref().storage(), contact)));
+	});
+
+	return peer.tempStorage().store(ContactAccepted {});
+}
+
+void ContactService::handlePairingResult(Context & ctx, Stored<ContactAccepted>)
+{
+	auto cdata = ctx.local().ref().storage().store(ContactData {
+		.prev = {},
+		.identity = ctx.peer().identity()->finalOwner().data(),
+		.name = std::nullopt,
+	});
+
+	Contact contact(shared_ptr<Contact::Priv>(new Contact::Priv {
+		.data = { cdata },
+	}));
+
+	auto contacts = ctx.local()->shared<Set<Contact>>();
+
+	ctx.local(ctx.local()->shared<Set<Contact>>(
+		contacts.add(ctx.local().ref().storage(), contact)));
+}
+
+ContactAccepted ContactAccepted::load(const Ref &)
+{
+	return ContactAccepted {};
+}
+
+Ref ContactAccepted::store(const Storage & st) const
+{
+	vector<Record::Item> items;
+	items.emplace_back("accept", "");
 	return st.storeObject(Record(std::move(items)));
 }

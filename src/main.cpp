@@ -1,4 +1,5 @@
 #include <erebos/attach.h>
+#include <erebos/contact.h>
 #include <erebos/identity.h>
 #include <erebos/network.h>
 #include <erebos/set.h>
@@ -74,7 +75,7 @@ struct TestPeer
 	Peer peer;
 	size_t id;
 	bool deleted = false;
-	promise<bool> attachAnswer {};
+	promise<bool> pairingAnswer {};
 };
 vector<TestPeer> testPeers;
 
@@ -245,7 +246,7 @@ future<bool> confirmPairing(string prefix, const Peer & peer, string confirm, fu
 
 	promise<bool> promise;
 	auto input = promise.get_future();
-	getPeer(peer).attachAnswer = move(promise);
+	getPeer(peer).pairingAnswer = move(promise);
 
 	ostringstream ss;
 	ss << prefix << " " << getPeer(peer).id << " " << confirm;
@@ -263,6 +264,11 @@ void startServer(const vector<string> &)
 	atts->onRequest(bind(confirmPairing, "attach-request", _1, _2, _3));
 	atts->onResponse(bind(confirmPairing, "attach-response", _1, _2, _3));
 	services.push_back(move(atts));
+
+	auto conts = make_unique<ContactService>();
+	conts->onRequest(bind(confirmPairing, "contact-request", _1, _2, _3));
+	conts->onResponse(bind(confirmPairing, "contact-response", _1, _2, _3));
+	services.push_back(move(conts));
 
 	services.push_back(make_unique<SyncService>());
 
@@ -416,12 +422,43 @@ void attachTo(const vector<string> & params)
 
 void attachAccept(const vector<string> & params)
 {
-	getPeer(params.at(0)).attachAnswer.set_value(true);
+	getPeer(params.at(0)).pairingAnswer.set_value(true);
 }
 
 void attachReject(const vector<string> & params)
 {
-	getPeer(params.at(0)).attachAnswer.set_value(false);
+	getPeer(params.at(0)).pairingAnswer.set_value(false);
+}
+
+void contactRequest(const vector<string> & params)
+{
+	server->svc<ContactService>().request(getPeer(params.at(0)).peer);
+}
+
+void contactAccept(const vector<string> & params)
+{
+	getPeer(params.at(0)).pairingAnswer.set_value(true);
+}
+
+void contactReject(const vector<string> & params)
+{
+	getPeer(params.at(0)).pairingAnswer.set_value(false);
+}
+
+void contactList(const vector<string> &)
+{
+	auto cmp = [](const Contact & x, const Contact & y) {
+		return x.data() < y.data();
+	};
+	for (const auto & c : h->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
+		ostringstream ss;
+		ss << "contact-list-item " << c.name();
+		if (auto id = c.identity())
+			if (auto iname = id->name())
+				ss << " " << *iname;
+		printLine(ss.str());
+	}
+	printLine("contact-list-done");
 }
 
 vector<Command> commands = {
@@ -442,6 +479,10 @@ vector<Command> commands = {
 	{ "attach-to", attachTo },
 	{ "attach-accept", attachAccept },
 	{ "attach-reject", attachReject },
+	{ "contact-request", contactRequest },
+	{ "contact-accept", contactAccept },
+	{ "contact-reject", contactReject },
+	{ "contact-list", contactList },
 };
 
 }
