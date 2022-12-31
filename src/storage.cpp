@@ -1054,6 +1054,8 @@ vector<Digest> Ref::rootsLocked() const
 		std::sort(roots.begin(), roots.end());
 		roots.erase(std::unique(roots.begin(), roots.end()), roots.end());
 	}
+
+	p->storage->p->rootsCache.emplace(p->digest, roots);
 	return roots;
 }
 
