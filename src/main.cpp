@@ -323,8 +323,15 @@ void sharedStateGet(const vector<string> &)
 
 void sharedStateWait(const vector<string> & args)
 {
-	static optional<Watched<vector<Ref>>> watched;
-	watched = h->behavior().lens<vector<Ref>>().watch([args, watched = watched] (const vector<Ref> & refs) mutable {
+	struct SharedStateWait
+	{
+		mutex lock;
+		bool done { false };
+		optional<Watched<vector<Ref>>> watched;
+	};
+	auto watchedPtr = make_shared<SharedStateWait>();
+
+	auto watched = h->behavior().lens<vector<Ref>>().watch([args, watchedPtr] (const vector<Ref> & refs) {
 		vector<Stored<Object>> objs;
 		objs.reserve(refs.size());
 		for (const auto & r : refs)
@@ -345,9 +352,15 @@ void sharedStateWait(const vector<string> & args)
 				ss << " " << a;
 			printLine(ss.str());
 
-			watched = std::nullopt;
+			scoped_lock lock(watchedPtr->lock);
+			watchedPtr->done = true;
+			watchedPtr->watched = std::nullopt;
 		}
 	});
+
+	scoped_lock lock(watchedPtr->lock);
+	if (!watchedPtr->done)
+		watchedPtr->watched = move(watched);
 }
 
 void watchLocalIdentity(const vector<string> &)
