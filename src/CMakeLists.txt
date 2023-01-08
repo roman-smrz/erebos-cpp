@@ -8,6 +8,7 @@ add_library(erebos
 	contact.cpp
 	frp.cpp
 	identity.cpp
+	merge.cpp
 	message.cpp
 	network.cpp
 	pairing.cpp
