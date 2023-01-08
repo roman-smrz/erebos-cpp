@@ -76,12 +76,12 @@ test Contact:
 
 	send "contact-list" to p1
 	expect from p1:
-		/contact-list-item Owner2 Owner2/
+		/contact-list-item [a-z0-9#]+ Owner2 Owner2/
 		/contact-list-(.*)/ capture done1_1
 	guard done1_1 == "done"
 	send "contact-list" to p2
 	expect from p2:
-		/contact-list-item Owner1 Owner1/
+		/contact-list-item [a-z0-9#]+ Owner1 Owner1/
 		/contact-list-(.*)/ capture done1_2
 	guard done1_2 == "done"
 
@@ -118,7 +118,7 @@ test Contact:
 
 	send "contact-list" to p3
 	expect from p3:
-		/contact-list-item Owner1 Owner1/
+		/contact-list-item [a-z0-9#]+ Owner1 Owner1/
 		/contact-list-(.*)/ capture done2_3
 	guard done2_3 == "done"
 
@@ -129,8 +129,8 @@ test Contact:
 
 	send "contact-list" to p4
 	expect from p4:
-		/contact-list-item Owner2 Owner2/
-		/contact-list-item Owner3 Owner3/
+		/contact-list-item ([a-z0-9#]+) Owner2 Owner2/ capture c4_2
+		/contact-list-item ([a-z0-9#]+) Owner3 Owner3/ capture c4_3
 		/contact-list-(.*)/ capture done2_4
 	guard done2_4 == "done"
 
@@ -143,7 +143,55 @@ test Contact:
 
 	send "contact-list" to p1
 	expect from p1:
-		/contact-list-item Owner2 Owner2/
-		/contact-list-item Owner3 Owner3/
+		/contact-list-item ([a-z0-9#]+) Owner2 Owner2/ capture c1_2
+		/contact-list-item ([a-z0-9#]+) Owner3 Owner3/ capture c1_3
 		/contact-list-(.*)/ capture done2_1
 	guard done2_1 == "done"
+
+	# Update custom name
+
+	send "contact-set-name $c4_2 Custom2" to p4
+	expect /contact-set-name-done/ from p4
+
+	send "contact-list" to p4
+	expect from p4:
+		/contact-list-item $c4_2 Custom2 Owner2/
+		/contact-list-item $c4_3 Owner3 Owner3/
+		/contact-list-(.*)/ capture done3_4
+	guard done3_4 == "done"
+
+	send "shared-state-get" to p4
+	expect /shared-state-get (.*)/ from p4 capture s4b
+	send "shared-state-wait $s4b" to p1
+	expect /shared-state-wait $s4b/ from p1
+
+	send "contact-list" to p1
+	expect from p1:
+		/contact-list-item $c4_2 Custom2 Owner2/
+		/contact-list-item $c4_3 Owner3 Owner3/
+		/contact-list-(.*)/ capture done3_1
+	guard done3_1 == "done"
+
+	send "contact-set-name $c1_2 Custom2B" to p1
+	expect /contact-set-name-done/ from p1
+	send "contact-set-name $c1_3 Custom3B" to p1
+	expect /contact-set-name-done/ from p1
+
+	send "contact-list" to p1
+	expect from p1:
+		/contact-list-item $c1_2 Custom2B Owner2/
+		/contact-list-item $c1_3 Custom3B Owner3/
+		/contact-list-(.*)/ capture done4_1
+	guard done4_1 == "done"
+
+	send "shared-state-get" to p1
+	expect /shared-state-get (.*)/ from p1 capture s1b
+	send "shared-state-wait $s1b" to p4
+	expect /shared-state-wait $s1b/ from p4
+
+	send "contact-list" to p4
+	expect from p4:
+		/contact-list-item $c4_2 Custom2B Owner2/
+		/contact-list-item $c4_3 Custom3B Owner3/
+		/contact-list-(.*)/ capture done4_4
+	guard done4_4 == "done"

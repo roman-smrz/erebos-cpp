@@ -32,12 +32,14 @@ public:
 
 	optional<Identity> identity() const;
 	optional<string> customName() const;
+	Contact customName(const Storage & st, const string & name) const;
 	string name() const;
 
 	bool operator==(const Contact &) const;
 	bool operator!=(const Contact &) const;
 
 	vector<Stored<ContactData>> data() const;
+	Digest leastRoot() const;
 
 private:
 	struct Priv;

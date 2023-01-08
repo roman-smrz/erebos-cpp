@@ -465,13 +465,37 @@ void contactList(const vector<string> &)
 	};
 	for (const auto & c : h->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
 		ostringstream ss;
-		ss << "contact-list-item " << c.name();
+		ss << "contact-list-item " << string(c.leastRoot()) << " " << c.name();
 		if (auto id = c.identity())
 			if (auto iname = id->name())
 				ss << " " << *iname;
 		printLine(ss.str());
 	}
 	printLine("contact-list-done");
+}
+
+void contactSetName(const vector<string> & args)
+{
+	auto id = args.at(0);
+	auto name = args.at(1);
+
+	auto cmp = [](const Contact & x, const Contact & y) {
+		return x.data() < y.data();
+	};
+	for (const auto & c : h->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
+		if (string(c.leastRoot()) == id) {
+			auto nh = h->update([&] (const Stored<LocalState> & loc) {
+				auto st = loc.ref().storage();
+				auto cc = c.customName(st, name);
+				auto contacts = loc->shared<Set<Contact>>();
+				return st.store(loc->shared<Set<Contact>>(contacts.add(st, cc)));
+			});
+			if (nh)
+				*h = *nh;
+			break;
+		}
+	}
+	printLine("contact-set-name-done");
 }
 
 vector<Command> commands = {
@@ -496,6 +520,7 @@ vector<Command> commands = {
 	{ "contact-accept", contactAccept },
 	{ "contact-reject", contactReject },
 	{ "contact-list", contactList },
+	{ "contact-set-name", contactSetName },
 };
 
 }

@@ -2,8 +2,11 @@
 
 #include "identity.h"
 
+#include <array>
+
 using namespace erebos;
 
+using std::array;
 using std::move;
 
 DEFINE_SHARED_TYPE(Set<Contact>,
@@ -34,6 +37,19 @@ optional<string> Contact::customName() const
 	return p->name;
 }
 
+Contact Contact::customName(const Storage & st, const string & name) const
+{
+	auto cdata = st.store(ContactData {
+		.prev = p->data,
+		.identity = {},
+		.name = name,
+	});
+
+	return Contact(shared_ptr<Contact::Priv>(new Contact::Priv {
+		.data = { cdata },
+	}));
+}
+
 string Contact::name() const
 {
 	if (auto cust = customName())
@@ -59,13 +75,33 @@ vector<Stored<ContactData>> Contact::data() const
 	return p->data;
 }
 
+Digest Contact::leastRoot() const
+{
+	if (p->data.empty())
+		return Digest(array<uint8_t, Digest::size> {});
+
+	vector<Digest> roots;
+	for (const auto & d : p->data)
+		for (const auto & r : d.ref().roots())
+			roots.push_back(r);
+	roots.erase(std::unique(roots.begin(), roots.end()), roots.end());
+	return roots[0];
+}
+
 void Contact::Priv::init()
 {
 	std::call_once(initFlag, [this]() {
-		// TODO: property lookup
-		identity = Identity::load(data[0]->identity);
+		vector<Stored<Signed<IdentityData>>> idata;
+		for (const auto & c : findPropertyComponents<Contact>(data, "identity"))
+			for (const auto & i : c->identity)
+				idata.push_back(i);
+
+		identity = Identity::load(idata);
 		if (identity)
 			name = identity->name();
+
+		if (auto opt = findPropertyComponent<Contact>(data, "name"))
+			name = (*opt)->name;
 	});
 }
 
