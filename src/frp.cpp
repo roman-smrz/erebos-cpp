@@ -2,6 +2,7 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <thread>
 
 using namespace erebos;
 
@@ -9,12 +10,18 @@ using std::condition_variable;
 using std::move;
 using std::mutex;
 using std::nullopt;
+using std::thread;
 using std::unique_lock;
+
+namespace {
 
 mutex bhvTimeMutex;
 condition_variable bhvTimeCond;
-bool bhvTimeRunning = false;
+optional<thread::id> bhvTimeRunning = nullopt;
+uint64_t bhvTimeCount = 0;
 uint64_t bhvTimeLast = 0;
+
+}
 
 BhvTime::BhvTime(const BhvCurTime & ct):
 	BhvTime(ct.time())
@@ -22,20 +29,31 @@ BhvTime::BhvTime(const BhvCurTime & ct):
 
 BhvCurTime::BhvCurTime()
 {
+	auto tid = std::this_thread::get_id();
 	unique_lock lock(bhvTimeMutex);
-	bhvTimeCond.wait(lock, []{ return !bhvTimeRunning; });
+	bhvTimeCond.wait(lock, [tid]{
+		return !bhvTimeRunning || bhvTimeRunning == tid;
+	});
 
-	bhvTimeRunning = true;
-	t = BhvTime(++bhvTimeLast);
+	if (bhvTimeRunning != tid) {
+		bhvTimeRunning = tid;
+		bhvTimeLast++;
+	}
+	t = BhvTime(bhvTimeLast);
+	bhvTimeCount++;
 }
 
 BhvCurTime::~BhvCurTime()
 {
 	if (t) {
 		unique_lock lock(bhvTimeMutex);
-		bhvTimeRunning = false;
-		lock.unlock();
-		bhvTimeCond.notify_one();
+		bhvTimeCount--;
+
+		if (bhvTimeCount == 0) {
+			bhvTimeRunning.reset();
+			lock.unlock();
+			bhvTimeCond.notify_one();
+		}
 	}
 }
 
