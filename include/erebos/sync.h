@@ -28,7 +28,7 @@ private:
 	void localStateWatcher(const vector<Ref> &);
 
 	const class Server * server;
-	std::optional<Watched<vector<Ref>>> watchedLocal;
+	Watched<vector<Ref>> watchedLocal;
 };
 
 }

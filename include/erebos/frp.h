@@ -62,6 +62,12 @@ template<typename T>
 class Watched
 {
 public:
+	Watched() = default;
+	Watched(const Watched<T> &) = default;
+	Watched & operator=(const Watched<T> &) = default;
+	Watched(Watched<T> &&) = default;
+	Watched & operator=(Watched<T> &&) = default;
+
 	Watched(shared_ptr<function<void(const BhvCurTime &)>> && cb):
 		cb(move(cb)) {}
 	~Watched();
