@@ -367,15 +367,27 @@ void FilesystemStorage::inotifyWatch()
 			event = (const struct inotify_event *) ptr;
 
 			if (event->mask & IN_MOVED_TO) {
-				scoped_lock lock(watcherLock);
-				UUID type = watchMap[event->wd];
-				if (auto mbid = UUID::fromString(event->name)) {
-					if (auto mbref = headRef(type, *mbid)) {
-						auto range = watchers.equal_range(type);
-						for (auto it = range.first; it != range.second; it++)
-							std::get<1>(it->second)(*mbid, *mbref);
+				vector<function<void(UUID id, const Digest &)>> callbacks;
+				optional<UUID> mbid;
+				optional<Digest> mbref;
+
+				{
+					// Copy relevant callbacks to temporary array, so they
+					// can be called without holding the watcherLock.
+
+					scoped_lock lock(watcherLock);
+					UUID type = watchMap[event->wd];
+					if ((mbid = UUID::fromString(event->name))) {
+						if ((mbref = headRef(type, *mbid))) {
+							auto range = watchers.equal_range(type);
+							for (auto it = range.first; it != range.second; it++)
+								callbacks.push_back(std::get<1>(it->second));
+						}
 					}
 				}
+
+				for (const auto & cb : callbacks)
+					cb(*mbid, *mbref);
 			}
 		}
 	}
