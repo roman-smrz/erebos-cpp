@@ -89,7 +89,7 @@ public:
 	virtual ~BhvImplBase();
 
 protected:
-	void dependsOn(shared_ptr<BhvImplBase> other);
+	void dependsOn(const BhvCurTime &, shared_ptr<BhvImplBase> other);
 	void updated(const BhvCurTime &);
 	virtual bool needsUpdate(const BhvCurTime &) const;
 	virtual void doUpdate(const BhvCurTime &);
@@ -251,9 +251,10 @@ private:
 template<typename A, typename B, typename C>
 BhvFun<A, C> operator>>(const BhvFun<A, B> & f, const BhvFun<B, C> & g)
 {
+	BhvCurTime ctime;
 	auto impl = make_shared<BhvComp<A, B, C>>(f, g);
-	impl->dependsOn(f.impl);
-	impl->dependsOn(g.impl);
+	impl->dependsOn(ctime, f.impl);
+	impl->dependsOn(ctime, g.impl);
 	return impl;
 }
 

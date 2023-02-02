@@ -73,7 +73,7 @@ BhvCurTime & BhvCurTime::operator=(BhvCurTime && other)
 
 BhvImplBase::~BhvImplBase() = default;
 
-void BhvImplBase::dependsOn(shared_ptr<BhvImplBase> other)
+void BhvImplBase::dependsOn(const BhvCurTime &, shared_ptr<BhvImplBase> other)
 {
 	depends.push_back(other);
 	other->rdepends.push_back(shared_from_this());
