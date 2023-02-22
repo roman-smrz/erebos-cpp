@@ -528,6 +528,7 @@ void filterAncestors(std::vector<Stored<T>> & xs)
 }
 
 template<class T> class WatchedHead;
+template<class T> class HeadBhv;
 
 template<class T>
 class Head
@@ -562,8 +563,13 @@ template<class T>
 class WatchedHead : public Head<T>
 {
 	friend class Head<T>;
+	friend class HeadBhv<T>;
+
+	WatchedHead(const Head<T> & h):
+		Head<T>(h), watcherId(-1) {}
 	WatchedHead(const Head<T> & h, int watcherId):
 		Head<T>(h), watcherId(watcherId) {}
+
 	int watcherId;
 
 public:
@@ -588,15 +594,26 @@ class HeadBhv : public BhvSource<T>
 {
 public:
 	HeadBhv(const Head<T> & head):
-		whead(head.watch([this] (const Head<T> & cur) {
-			BhvCurTime ctime;
-			whead = cur;
-			BhvImplBase::updated(ctime);
-		})) {}
+		whead(head)
+	{}
 
 	T get(const BhvCurTime &, const std::monostate &) const { return *whead; }
 
 private:
+	friend class Head<T>;
+
+	void init()
+	{
+		whead = whead.watch([wp = weak_ptr<BhvImplBase>(BhvImplBase::shared_from_this()), this] (const Head<T> & cur) {
+			// make sure this object still exists
+			if (auto ptr = wp.lock()) {
+				BhvCurTime ctime;
+				whead = cur;
+				BhvImplBase::updated(ctime);
+			}
+		});
+	}
+
 	WatchedHead<T> whead;
 };
 
@@ -665,7 +682,9 @@ template<typename T>
 Bhv<T> Head<T>::behavior() const
 {
 	auto cur = reload();
-	return make_shared<HeadBhv<T>>(cur ? *cur : *this);
+	auto ret = make_shared<HeadBhv<T>>(cur ? *cur : *this);
+	ret->init();
+	return ret;
 }
 
 template<class T>
