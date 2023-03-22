@@ -22,15 +22,15 @@ add_library(erebos
 	uuid.cpp
 )
 
-add_executable(erebos-bin
-	main.cpp
-)
-
-set_target_properties(erebos-bin
-	PROPERTIES OUTPUT_NAME erebos
-)
-
 if (NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+	add_executable(erebos-bin
+		main.cpp
+	)
+
+	set_target_properties(erebos-bin
+		PROPERTIES OUTPUT_NAME erebos
+	)
+
 	target_link_libraries(erebos-bin
 		erebos
 		stdc++fs
