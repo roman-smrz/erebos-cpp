@@ -1,6 +1,7 @@
 #include <erebos/attach.h>
 #include <erebos/contact.h>
 #include <erebos/identity.h>
+#include <erebos/message.h>
 #include <erebos/network.h>
 #include <erebos/set.h>
 #include <erebos/storage.h>
@@ -270,6 +271,22 @@ void startServer(const vector<string> &)
 	conts->onResponse(bind(confirmPairing, "contact-response", _1, _2, _3));
 	services.push_back(move(conts));
 
+	auto dms = make_unique<DirectMessageService>();
+	dms->onUpdate([](const DirectMessageThread & thread, ssize_t, ssize_t) {
+		ostringstream ss;
+
+		string name = "<unnamed>";
+		if (auto opt = thread.peer().name())
+			name = *opt;
+
+		ss << "dm-received"
+			<< " from " << name
+			<< " text " << thread.at(0).text()
+			;
+		printLine(ss.str());
+	});
+	services.push_back(move(dms));
+
 	services.push_back(make_unique<SyncService>());
 
 	server.emplace(*h, move(services));
@@ -498,6 +515,14 @@ void contactSetName(const vector<string> & args)
 	printLine("contact-set-name-done");
 }
 
+void dmSendPeer(const vector<string> & args)
+{
+	server->svc<DirectMessageService>().send(
+			server->identity().finalOwner(),
+			getPeer(args.at(0)).peer,
+			args.at(1));
+}
+
 vector<Command> commands = {
 	{ "store", store },
 	{ "stored-generation", storedGeneration },
@@ -521,6 +546,7 @@ vector<Command> commands = {
 	{ "contact-reject", contactReject },
 	{ "contact-list", contactList },
 	{ "contact-set-name", contactSetName },
+	{ "dm-send-peer", dmSendPeer },
 };
 
 }
