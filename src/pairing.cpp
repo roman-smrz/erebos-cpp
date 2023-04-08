@@ -165,7 +165,7 @@ void PairingServiceBase::handle(Context & ctx)
 		state->phase = StatePhase::PeerRequestConfirm;
 	}
 
-	else if (auto reject = rec->item("reject").asText()) {
+	else if (rec->item("reject")) {
 		if (state->phase < StatePhase::PairingDone) {
 			state->phase = StatePhase::PairingFailed;
 			ctx.afterCommit([&]() {
@@ -293,7 +293,7 @@ void PairingServiceBase::waitForConfirmation(Peer peer, weak_ptr<State> wstate, 
 		}
 	} else {
 		if (state->phase != StatePhase::PairingFailed) {
-			peer.send(uuid(), Object(Record({{ "reject", string() }})));
+			peer.send(uuid(), Object(Record({{ "reject", Record::Item::Empty {} }})));
 			state->phase = StatePhase::PairingFailed;
 			state->outcome.set_value(Outcome::UserRejected);
 		}
