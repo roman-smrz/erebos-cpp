@@ -230,8 +230,11 @@ public:
 			std::string value;
 		};
 
+		struct Empty {};
+
 		typedef std::variant<
 			std::monostate,
+			Empty,
 			int,
 			std::string,
 			std::vector<uint8_t>,
@@ -253,6 +256,7 @@ public:
 
 		operator bool() const;
 
+		std::optional<Empty> asEmpty() const;
 		std::optional<int> asInteger() const;
 		std::optional<std::string> asText() const;
 		std::optional<std::vector<uint8_t>> asBinary() const;

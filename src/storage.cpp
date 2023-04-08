@@ -1079,6 +1079,14 @@ RecordT<S>::Item::operator bool() const
 }
 
 template<class S>
+optional<typename RecordT<S>::Item::Empty> RecordT<S>::Item::asEmpty() const
+{
+	if (holds_alternative<RecordT<S>::Item::Empty>(value))
+		return std::get<RecordT<S>::Item::Empty>(value);
+	return nullopt;
+}
+
+template<class S>
 optional<int> RecordT<S>::Item::asInteger() const
 {
 	if (holds_alternative<int>(value))
@@ -1179,7 +1187,11 @@ optional<RecordT<S>> RecordT<S>::decode(const S & st,
 			begin = newline + 1;
 		}
 
-		if (type == "i")
+		if (type == "e") {
+			if (value.size() != 0)
+				return nullopt;
+			items->emplace_back(name, typename Item::Empty {});
+		} else if (type == "i")
 			try {
 				items->emplace_back(name, std::stoi(value));
 			} catch (invalid_argument &) {
@@ -1271,7 +1283,10 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 		string type;
 		string value;
 
-		if (auto x = item.asInteger()) {
+		if (item.asEmpty()) {
+			type = "e";
+			value = "";
+		} else if (auto x = item.asInteger()) {
 			type = "i";
 			value = to_string(*x);
 		} else if (auto x = item.asText()) {
