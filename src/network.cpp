@@ -48,8 +48,9 @@ const Bhv<LocalState> & Server::localState() const
 	return p->localState;
 }
 
-const Identity & Server::identity() const
+Identity Server::identity() const
 {
+	shared_lock lock(p->selfMutex);
 	return p->self;
 }
 
@@ -293,7 +294,7 @@ shared_ptr<Server::Priv> Server::Priv::getptr()
 void Server::Priv::doListen()
 {
 	vector<uint8_t> buf, decrypted, *current;
-	unique_lock<mutex> lock(dataMutex);
+	unique_lock lock(dataMutex);
 
 	for (; !finish; lock.lock()) {
 		sockaddr_in paddr;
@@ -340,7 +341,9 @@ void Server::Priv::doListen()
 
 				ReplyBuilder reply;
 
-				scoped_lock<mutex> hlock(dataMutex);
+				scoped_lock hlock(dataMutex);
+				shared_lock slock(selfMutex);
+
 				handlePacket(peer, *header, reply);
 				peer.updateIdentity(reply);
 				peer.updateChannel(reply);
@@ -359,13 +362,14 @@ void Server::Priv::doListen()
 
 void Server::Priv::doAnnounce()
 {
-	unique_lock<mutex> lock(dataMutex);
+	unique_lock lock(dataMutex);
 	auto lastAnnounce = steady_clock::now() - announceInterval;
 
 	while (!finish) {
 		auto now = steady_clock::now();
 
 		if (lastAnnounce + announceInterval < now) {
+			shared_lock slock(selfMutex);
 			TransportHeader header({
 				{ TransportHeader::Type::AnnounceSelf, *self.ref() }
 			});
@@ -578,6 +582,8 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 void Server::Priv::handleLocalHeadChange(const Head<LocalState> & head)
 {
 	scoped_lock lock(dataMutex);
+	scoped_lock slock(selfMutex);
+
 	if (auto id = head->identity()) {
 		if (*id != self) {
 			self = *id;

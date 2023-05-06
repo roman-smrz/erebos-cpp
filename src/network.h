@@ -6,6 +6,7 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <shared_mutex>
 #include <thread>
 #include <vector>
 
@@ -15,6 +16,8 @@ using std::condition_variable;
 using std::monostate;
 using std::mutex;
 using std::optional;
+using std::shared_lock;
+using std::shared_mutex;
 using std::shared_ptr;
 using std::string;
 using std::thread;
@@ -162,8 +165,9 @@ struct Server::Priv
 	condition_variable announceCondvar;
 	bool finish = false;
 
+	shared_mutex selfMutex;
 	Identity self;
-	Bhv<LocalState> localState;
+	const Bhv<LocalState> localState;
 
 	thread threadListen;
 	thread threadAnnounce;
