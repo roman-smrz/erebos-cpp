@@ -21,7 +21,7 @@ struct AttachIdentity;
 class AttachService : public PairingService<AttachIdentity>
 {
 public:
-	AttachService();
+	AttachService(Config &&, const Server &);
 	virtual ~AttachService();
 
 	UUID uuid() const override;

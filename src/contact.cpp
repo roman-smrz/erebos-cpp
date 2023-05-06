@@ -142,18 +142,17 @@ Ref ContactData::store(const Storage & st) const
 	return st.storeObject(Record(std::move(items)));
 }
 
-ContactService::ContactService() = default;
+ContactService::ContactService(Config && config, const Server & s):
+	PairingService(move(config)),
+	server(s)
+{
+}
+
 ContactService::~ContactService() = default;
 
 UUID ContactService::uuid() const
 {
 	return serviceUUID;
-}
-
-void ContactService::serverStarted(const Server & s)
-{
-	PairingService<ContactAccepted>::serverStarted(s);
-	server = &s;
 }
 
 void ContactService::request(const Peer & peer)
@@ -163,7 +162,7 @@ void ContactService::request(const Peer & peer)
 
 Stored<ContactAccepted> ContactService::handlePairingComplete(const Peer & peer)
 {
-	server->localHead().update([&] (const Stored<LocalState> & local) {
+	server.localHead().update([&] (const Stored<LocalState> & local) {
 		auto cdata = local.ref().storage().store(ContactData {
 			.prev = {},
 			.identity = peer.identity()->finalOwner().data(),

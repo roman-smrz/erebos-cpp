@@ -73,12 +73,10 @@ struct ContactAccepted;
 class ContactService : public PairingService<ContactAccepted>
 {
 public:
-	ContactService();
+	ContactService(Config &&, const Server &);
 	virtual ~ContactService();
 
 	UUID uuid() const override;
-
-	void serverStarted(const class Server &) override;
 
 	void request(const Peer &);
 
@@ -86,7 +84,7 @@ protected:
 	virtual Stored<ContactAccepted> handlePairingComplete(const Peer &) override;
 	virtual void handlePairingResult(Context &, Stored<ContactAccepted>) override;
 
-	const class Server * server;
+	const Server & server;
 };
 
 template<class T> class Signed;

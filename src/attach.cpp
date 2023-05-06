@@ -14,7 +14,11 @@ using std::runtime_error;
 
 static const UUID myUUID("4995a5f9-2d4d-48e9-ad3b-0bf1c2a1be7f");
 
-AttachService::AttachService() = default;
+AttachService::AttachService(Config && config, const Server &):
+	PairingService(move(config))
+{
+}
+
 AttachService::~AttachService() = default;
 
 UUID AttachService::uuid() const

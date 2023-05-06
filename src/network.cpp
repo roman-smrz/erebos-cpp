@@ -24,11 +24,12 @@ using std::unique_lock;
 
 using namespace erebos;
 
-Server::Server(const Head<LocalState> & head, vector<unique_ptr<Service>> && svcs):
-	p(new Priv(head, *head->identity(), std::move(svcs)))
+Server::Server(const Head<LocalState> & head, ServerConfig && config):
+	p(new Priv(head, *head->identity()))
 {
-	for (const auto & s : p->services)
-		s->serverStarted(*this);
+	p->services.reserve(config.services.size());
+	for (const auto & ctor : config.services)
+		p->services.emplace_back(ctor(*this));
 }
 
 Server:: Server(const std::shared_ptr<Priv> & ptr):
@@ -223,13 +224,11 @@ void PeerList::onUpdate(function<void(size_t, const Peer *)> w)
 }
 
 
-Server::Priv::Priv(const Head<LocalState> & local, const Identity & self,
-		vector<unique_ptr<Service>> && svcs):
+Server::Priv::Priv(const Head<LocalState> & local, const Identity & self):
 	self(self),
 	// Watching needs to start after self is initialized
 	localState(local.behavior()),
-	localHead(local.watch(std::bind(&Priv::handleLocalHeadChange, this, std::placeholders::_1))),
-	services(std::move(svcs))
+	localHead(local.watch(std::bind(&Priv::handleLocalHeadChange, this, std::placeholders::_1)))
 {
 	struct ifaddrs * raddrs;
 	if (getifaddrs(&raddrs) < 0)

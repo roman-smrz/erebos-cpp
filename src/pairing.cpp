@@ -21,6 +21,11 @@ using std::scoped_lock;
 using std::thread;
 using std::unique_lock;
 
+PairingServiceBase::PairingServiceBase(Config && c):
+	config(move(c))
+{
+}
+
 PairingServiceBase::~PairingServiceBase()
 {
 	// There may be some threads in waitForConfirmation waiting on client
@@ -35,28 +40,28 @@ PairingServiceBase::~PairingServiceBase()
 	}
 }
 
-void PairingServiceBase::onRequestInit(RequestInitHook hook)
+PairingServiceBase::Config & PairingServiceBase::Config::onRequestInit(RequestInitHook hook)
 {
-	lock_guard lock(stateLock);
 	requestInitHook = hook;
+	return *this;
 }
 
-void PairingServiceBase::onResponse(ConfirmHook hook)
+PairingServiceBase::Config & PairingServiceBase::Config::onResponse(ConfirmHook hook)
 {
-	lock_guard lock(stateLock);
 	responseHook = hook;
+	return *this;
 }
 
-void PairingServiceBase::onRequest(ConfirmHook hook)
+PairingServiceBase::Config & PairingServiceBase::Config::onRequest(ConfirmHook hook)
 {
-	lock_guard lock(stateLock);
 	requestHook = hook;
+	return *this;
 }
 
-void PairingServiceBase::onRequestNonceFailed(RequestNonceFailedHook hook)
+PairingServiceBase::Config & PairingServiceBase::Config::onRequestNonceFailed(RequestNonceFailedHook hook)
 {
-	lock_guard lock(stateLock);
 	requestNonceFailedHook = hook;
+	return *this;
 }
 
 void PairingServiceBase::handle(Context & ctx)
@@ -99,8 +104,8 @@ void PairingServiceBase::handle(Context & ctx)
 		} else if (state->phase != StatePhase::NoPairing)
 			return;
 
-		if (requestInitHook)
-			requestInitHook(ctx.peer());
+		if (config.requestInitHook)
+			config.requestInitHook(ctx.peer());
 
 		state->phase = StatePhase::PeerRequest;
 		state->idReq = idReq;
@@ -120,12 +125,12 @@ void PairingServiceBase::handle(Context & ctx)
 			return;
 		}
 
-		if (responseHook) {
+		if (config.responseHook) {
 			string confirm = confirmationNumber(nonceDigest(
 				*state->idReq, *state->idRsp,
 				state->nonce, *response));
 			std::thread(&PairingServiceBase::waitForConfirmation,
-					this, ctx.peer(), state, confirm, responseHook).detach();
+					this, ctx.peer(), state, confirm, config.responseHook).detach();
 		}
 
 		state->phase = StatePhase::OurRequestConfirm;
@@ -143,8 +148,8 @@ void PairingServiceBase::handle(Context & ctx)
 				*state->idReq, *state->idRsp,
 				*reqnonce, vector<uint8_t>());
 		if (check != state->peerCheck) {
-			if (requestNonceFailedHook)
-				requestNonceFailedHook(ctx.peer());
+			if (config.requestNonceFailedHook)
+				config.requestNonceFailedHook(ctx.peer());
 			if (state->phase < StatePhase::PairingDone) {
 				state->phase = StatePhase::PairingFailed;
 				ctx.afterCommit([&]() {
@@ -154,12 +159,12 @@ void PairingServiceBase::handle(Context & ctx)
 			return;
 		}
 
-		if (requestHook) {
+		if (config.requestHook) {
 			string confirm = confirmationNumber(nonceDigest(
 				*state->idReq, *state->idRsp,
 				*reqnonce, state->nonce));
 			std::thread(&PairingServiceBase::waitForConfirmation,
-					this, ctx.peer(), state, confirm, requestHook).detach();
+					this, ctx.peer(), state, confirm, config.requestHook).detach();
 		}
 
 		state->phase = StatePhase::PeerRequestConfirm;

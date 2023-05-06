@@ -257,39 +257,39 @@ future<bool> confirmPairing(string prefix, const Peer & peer, string confirm, fu
 
 void startServer(const vector<string> &)
 {
-	vector<unique_ptr<Service>> services;
-
 	using namespace std::placeholders;
 
-	auto atts = make_unique<AttachService>();
-	atts->onRequest(bind(confirmPairing, "attach-request", _1, _2, _3));
-	atts->onResponse(bind(confirmPairing, "attach-response", _1, _2, _3));
-	services.push_back(move(atts));
+	ServerConfig config;
 
-	auto conts = make_unique<ContactService>();
-	conts->onRequest(bind(confirmPairing, "contact-request", _1, _2, _3));
-	conts->onResponse(bind(confirmPairing, "contact-response", _1, _2, _3));
-	services.push_back(move(conts));
+	config.service<AttachService>()
+		.onRequest(bind(confirmPairing, "attach-request", _1, _2, _3))
+		.onResponse(bind(confirmPairing, "attach-response", _1, _2, _3))
+		;
 
-	auto dms = make_unique<DirectMessageService>();
-	dms->onUpdate([](const DirectMessageThread & thread, ssize_t, ssize_t) {
-		ostringstream ss;
+	config.service<ContactService>()
+		.onRequest(bind(confirmPairing, "contact-request", _1, _2, _3))
+		.onResponse(bind(confirmPairing, "contact-response", _1, _2, _3))
+		;
 
-		string name = "<unnamed>";
-		if (auto opt = thread.peer().name())
-			name = *opt;
+	config.service<DirectMessageService>()
+		.onUpdate([](const DirectMessageThread & thread, ssize_t, ssize_t) {
+			ostringstream ss;
 
-		ss << "dm-received"
-			<< " from " << name
-			<< " text " << thread.at(0).text()
-			;
-		printLine(ss.str());
-	});
-	services.push_back(move(dms));
+			string name = "<unnamed>";
+			if (auto opt = thread.peer().name())
+				name = *opt;
 
-	services.push_back(make_unique<SyncService>());
+			ss << "dm-received"
+				<< " from " << name
+				<< " text " << thread.at(0).text()
+				;
+			printLine(ss.str());
+		})
+		;
 
-	server.emplace(*h, move(services));
+	config.service<SyncService>();
+
+	server.emplace(*h, move(config));
 
 	server->peerList().onUpdate([](size_t idx, const Peer * peer) {
 		size_t i = 0;

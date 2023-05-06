@@ -49,10 +49,4 @@ struct DirectMessageThread::Iterator::Priv
 	vector<Stored<DirectMessageData>> next;
 };
 
-struct DirectMessageService::Priv
-{
-	vector<ThreadWatcher> watchers;
-	mutex watcherLock;
-};
-
 }

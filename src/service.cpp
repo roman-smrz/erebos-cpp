@@ -44,7 +44,3 @@ void Service::Context::runAfterCommitHooks() const
 	for (const auto & hook : p->afterCommit)
 		hook();
 }
-
-void Service::serverStarted(const class Server &)
-{
-}

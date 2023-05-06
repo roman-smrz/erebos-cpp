@@ -74,21 +74,30 @@ private:
 class DirectMessageService : public Service
 {
 public:
-	DirectMessageService();
+	using ThreadWatcher = std::function<void(const DirectMessageThread &, ssize_t, ssize_t)>;
+
+	class Config
+	{
+	public:
+		Config & onUpdate(ThreadWatcher);
+
+	private:
+		friend class DirectMessageService;
+		vector<ThreadWatcher> watchers;
+	};
+
+	DirectMessageService(Config &&, const Server &);
 	virtual ~DirectMessageService();
 
 	UUID uuid() const override;
 	void handle(Context &) override;
 
-	typedef std::function<void(const DirectMessageThread &, ssize_t, ssize_t)> ThreadWatcher;
-	void onUpdate(ThreadWatcher);
 	DirectMessageThread thread(const Identity &);
 
 	DirectMessage send(const Identity &, const Peer &, const std::string &);
 
 private:
-	struct Priv;
-	unique_ptr<Priv> p;
+	const Config config;
 };
 
 }

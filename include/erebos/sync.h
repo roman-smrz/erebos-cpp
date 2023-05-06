@@ -15,19 +15,17 @@ using std::vector;
 class SyncService : public Service
 {
 public:
-	SyncService();
+	SyncService(Config &&, const Server &);
 	virtual ~SyncService();
 
 	UUID uuid() const override;
 	void handle(Context &) override;
 
-	void serverStarted(const class Server &) override;
-
 private:
 	void peerWatcher(size_t, const class Peer *);
 	void localStateWatcher(const vector<Ref> &);
 
-	const class Server * server;
+	const Server & server;
 	Watched<vector<Ref>> watchedLocal;
 };
 

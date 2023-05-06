@@ -143,8 +143,7 @@ struct WaitingRef
 
 struct Server::Priv
 {
-	Priv(const Head<LocalState> & local, const Identity & self,
-			vector<unique_ptr<Service>> && svcs);
+	Priv(const Head<LocalState> & local, const Identity & self);
 	~Priv();
 
 	shared_ptr<Priv> getptr();

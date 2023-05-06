@@ -29,11 +29,6 @@ using std::vector;
 class PairingServiceBase : public Service
 {
 public:
-	virtual ~PairingServiceBase();
-
-	typedef function<void(const Peer &)> RequestInitHook;
-	void onRequestInit(RequestInitHook);
-
 	enum class Outcome
 	{
 		Success,
@@ -44,12 +39,28 @@ public:
 		Stale,
 	};
 
-	typedef function<future<bool>(const Peer &, string, future<Outcome> &&)> ConfirmHook;
-	void onResponse(ConfirmHook);
-	void onRequest(ConfirmHook);
+	using RequestInitHook = function<void(const Peer &)>;
+	using ConfirmHook = function<future<bool>(const Peer &, string, future<Outcome> &&)>;
+	using RequestNonceFailedHook = function<void(const Peer &)>;
 
-	typedef function<void(const Peer &)> RequestNonceFailedHook;
-	void onRequestNonceFailed(RequestNonceFailedHook);
+	class Config
+	{
+	public:
+		Config & onRequestInit(RequestInitHook);
+		Config & onResponse(PairingServiceBase::ConfirmHook);
+		Config & onRequest(PairingServiceBase::ConfirmHook);
+		Config & onRequestNonceFailed(RequestNonceFailedHook);
+
+	private:
+		friend class PairingServiceBase;
+		RequestInitHook requestInitHook;
+		ConfirmHook responseHook;
+		ConfirmHook requestHook;
+		RequestNonceFailedHook requestNonceFailedHook;
+	};
+
+	PairingServiceBase(Config &&);
+	virtual ~PairingServiceBase();
 
 protected:
 	void requestPairing(UUID serviceId, const Peer & peer);
@@ -62,11 +73,7 @@ private:
 			const vector<uint8_t> & nonce1, const vector<uint8_t> & nonce2);
 	static string confirmationNumber(const vector<uint8_t> &);
 
-	RequestInitHook requestInitHook;
-	ConfirmHook responseHook;
-	ConfirmHook requestHook;
-	RequestNonceFailedHook requestNonceFailedHook;
-
+	const Config config;
 	optional<Ref> result;
 
 	enum class StatePhase {
@@ -99,6 +106,10 @@ private:
 template<class Result>
 class PairingService : public PairingServiceBase
 {
+public:
+	PairingService(Config && config):
+		PairingServiceBase(move(config)) {}
+
 protected:
 	virtual Stored<Result> handlePairingComplete(const Peer &) = 0;
 	virtual void handlePairingResult(Context &, Stored<Result>) = 0;

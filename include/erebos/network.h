@@ -10,11 +10,16 @@ struct sockaddr_in;
 
 namespace erebos {
 
+using std::vector;
+using std::unique_ptr;
+
+class ServerConfig;
+
 class Server
 {
 	struct Priv;
 public:
-	Server(const Head<LocalState> &, std::vector<std::unique_ptr<Service>> &&);
+	Server(const Head<LocalState> &, ServerConfig &&);
 	Server(const std::shared_ptr<Priv> &);
 	~Server();
 
@@ -36,10 +41,40 @@ private:
 	const std::shared_ptr<Priv> p;
 };
 
+class ServerConfig
+{
+public:
+	ServerConfig() = default;
+	ServerConfig(const ServerConfig &) = delete;
+	ServerConfig(ServerConfig &&) = default;
+	ServerConfig & operator=(const ServerConfig &) = delete;
+	ServerConfig & operator=(ServerConfig &&) = default;
+
+	template<class S>
+	typename S::Config & service();
+
+private:
+	friend class Server;
+	vector<function<unique_ptr<Service>(const Server &)>> services;
+};
+
 template<class S>
 S & Server::svc()
 {
 	return dynamic_cast<S&>(svcHelper(typeid(S)));
+}
+
+template<class S>
+typename S::Config & ServerConfig::service()
+{
+	auto config = make_shared<typename S::Config>();
+	auto & configRef = *config;
+
+	services.push_back([config = move(config)](const Server & server) {
+		return make_unique<S>(move(*config), server);
+	});
+
+	return configRef;
 }
 
 class Peer

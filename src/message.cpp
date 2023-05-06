@@ -202,8 +202,14 @@ const Identity & DirectMessageThread::peer() const
 }
 
 
-DirectMessageService::DirectMessageService():
-	p(new Priv)
+DirectMessageService::Config & DirectMessageService::Config::onUpdate(ThreadWatcher w)
+{
+	watchers.push_back(w);
+	return *this;
+}
+
+DirectMessageService::DirectMessageService(Config && c, const Server &):
+	config(move(c))
 {}
 
 DirectMessageService::~DirectMessageService() = default;
@@ -229,14 +235,8 @@ void DirectMessageService::handle(Context & ctx)
 
 	lock.unlock();
 
-	for (const auto & w : p->watchers)
+	for (const auto & w : config.watchers)
 		w(dmt, -1, -1);
-}
-
-void DirectMessageService::onUpdate(ThreadWatcher w)
-{
-	scoped_lock l(p->watcherLock);
-	p->watchers.push_back(w);
 }
 
 DirectMessageThread DirectMessageService::thread(const Identity & peer)

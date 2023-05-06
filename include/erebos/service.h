@@ -7,11 +7,15 @@
 
 namespace erebos {
 
+class Server;
+
 class Service
 {
 public:
 	Service();
 	virtual ~Service();
+
+	using Config = monostate;
 
 	class Context
 	{
@@ -35,8 +39,6 @@ public:
 
 	virtual UUID uuid() const = 0;
 	virtual void handle(Context &) = 0;
-
-	virtual void serverStarted(const class Server &);
 };
 
 }
