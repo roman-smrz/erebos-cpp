@@ -94,10 +94,11 @@ public:
 
 	DirectMessageThread thread(const Identity &);
 
-	DirectMessage send(const Identity &, const Peer &, const std::string &);
+	DirectMessage send(const Peer &, const std::string &);
 
 private:
 	const Config config;
+	const Server & server;
 };
 
 }

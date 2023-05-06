@@ -518,7 +518,6 @@ void contactSetName(const vector<string> & args)
 void dmSendPeer(const vector<string> & args)
 {
 	server->svc<DirectMessageService>().send(
-			server->identity().finalOwner(),
 			getPeer(args.at(0)).peer,
 			args.at(1));
 }

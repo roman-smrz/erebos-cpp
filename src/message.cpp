@@ -208,8 +208,9 @@ DirectMessageService::Config & DirectMessageService::Config::onUpdate(ThreadWatc
 	return *this;
 }
 
-DirectMessageService::DirectMessageService(Config && c, const Server &):
-	config(move(c))
+DirectMessageService::DirectMessageService(Config && c, const Server & s):
+	config(move(c)),
+	server(s)
 {}
 
 DirectMessageService::~DirectMessageService() = default;
@@ -245,7 +246,7 @@ DirectMessageThread DirectMessageService::thread(const Identity & peer)
 	return DirectMessageThread::Priv::getThreadLocked(peer.finalOwner());
 }
 
-DirectMessage DirectMessageService::send(const Identity & from, const Peer & peer, const string & text)
+DirectMessage DirectMessageService::send(const Peer & peer, const string & text)
 {
 	auto pid = peer.identity();
 	if (!pid)
@@ -254,9 +255,9 @@ DirectMessage DirectMessageService::send(const Identity & from, const Peer & pee
 
 	scoped_lock lock(threadLock);
 
-	auto msg = from.ref()->storage().store(DirectMessageData {
+	auto msg = server.localHead().ref().storage().store(DirectMessageData {
 		.prev = DirectMessageThread::Priv::getThreadLocked(powner).p->head,
-		.from = from.finalOwner(),
+		.from = server.identity().finalOwner(),
 		.time = ZonedTime::now(),
 		.text = text,
 	});
