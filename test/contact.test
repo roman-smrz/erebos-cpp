@@ -64,10 +64,11 @@ test Contact:
 
 	# Contact between 1 and 2
 
-	send "contact-request $peer1_2" to p1
-	expect /contact-request $peer2_1 ([0-9]*)/ from p2 capture code1_2
-	expect /contact-response $peer1_2 ([0-9]*)/ from p1 capture code1_1
-	guard code1_1 == code1_2
+	local:
+		send "contact-request $peer1_2" to p1
+		expect /contact-request $peer2_1 ([0-9]*)/ from p2 capture code2
+		expect /contact-response $peer1_2 ([0-9]*)/ from p1 capture code1
+		guard (code1 == code2)
 
 	send "contact-accept $peer1_2" to p1
 	send "contact-accept $peer2_1" to p2
@@ -78,12 +79,12 @@ test Contact:
 	expect from p1:
 		/contact-list-item [a-z0-9#]+ Owner2 Owner2/
 		/contact-list-(.*)/ capture done1_1
-	guard done1_1 == "done"
+	guard (done1_1 == "done")
 	send "contact-list" to p2
 	expect from p2:
 		/contact-list-item [a-z0-9#]+ Owner1 Owner1/
 		/contact-list-(.*)/ capture done1_2
-	guard done1_2 == "done"
+	guard (done1_2 == "done")
 
 	# Attach peer 4 to Owner1
 
@@ -91,9 +92,10 @@ test Contact:
 	expect /local-identity Device4/ from p4
 
 	send "attach-to $peer4_1" to p4
-	expect /attach-request $peer1_4 ([0-9]*)/ from p1 capture code2_1
-	expect /attach-response $peer4_1 ([0-9]*)/ from p4 capture code2_4
-	guard code2_1 == code2_4
+	local:
+		expect /attach-request $peer1_4 ([0-9]*)/ from p1 capture code1
+		expect /attach-response $peer4_1 ([0-9]*)/ from p4 capture code4
+		guard (code1 == code4)
 
 	send "attach-accept $peer1_4" to p1
 	send "attach-accept $peer4_1" to p4
@@ -107,9 +109,10 @@ test Contact:
 	# Contact between 3 and 4
 
 	send "contact-request $peer3_4" to p3
-	expect /contact-request $peer4_3 ([0-9]*)/ from p4 capture code3_4
-	expect /contact-response $peer3_4 ([0-9]*)/ from p3 capture code3_3
-	guard code3_3 == code3_4
+	local:
+		expect /contact-request $peer4_3 ([0-9]*)/ from p4 capture code4
+		expect /contact-response $peer3_4 ([0-9]*)/ from p3 capture code3
+		guard (code3 == code4)
 
 	send "contact-accept $peer3_4" to p3
 	send "contact-accept $peer4_3" to p4
@@ -120,7 +123,7 @@ test Contact:
 	expect from p3:
 		/contact-list-item [a-z0-9#]+ Owner1 Owner1/
 		/contact-list-(.*)/ capture done2_3
-	guard done2_3 == "done"
+	guard (done2_3 == "done")
 
 	send "shared-state-get" to p1
 	expect /shared-state-get (.*)/ from p1 capture s1
@@ -132,7 +135,7 @@ test Contact:
 		/contact-list-item ([a-z0-9#]+) Owner2 Owner2/ capture c4_2
 		/contact-list-item ([a-z0-9#]+) Owner3 Owner3/ capture c4_3
 		/contact-list-(.*)/ capture done2_4
-	guard done2_4 == "done"
+	guard (done2_4 == "done")
 
 	# Check sync between 1 and 4
 
@@ -146,7 +149,7 @@ test Contact:
 		/contact-list-item ([a-z0-9#]+) Owner2 Owner2/ capture c1_2
 		/contact-list-item ([a-z0-9#]+) Owner3 Owner3/ capture c1_3
 		/contact-list-(.*)/ capture done2_1
-	guard done2_1 == "done"
+	guard (done2_1 == "done")
 
 	# Update custom name
 
@@ -158,7 +161,7 @@ test Contact:
 		/contact-list-item $c4_2 Custom2 Owner2/
 		/contact-list-item $c4_3 Owner3 Owner3/
 		/contact-list-(.*)/ capture done3_4
-	guard done3_4 == "done"
+	guard (done3_4 == "done")
 
 	send "shared-state-get" to p4
 	expect /shared-state-get (.*)/ from p4 capture s4b
@@ -170,7 +173,7 @@ test Contact:
 		/contact-list-item $c4_2 Custom2 Owner2/
 		/contact-list-item $c4_3 Owner3 Owner3/
 		/contact-list-(.*)/ capture done3_1
-	guard done3_1 == "done"
+	guard (done3_1 == "done")
 
 	send "contact-set-name $c1_2 Custom2B" to p1
 	expect /contact-set-name-done/ from p1
@@ -182,7 +185,7 @@ test Contact:
 		/contact-list-item $c1_2 Custom2B Owner2/
 		/contact-list-item $c1_3 Custom3B Owner3/
 		/contact-list-(.*)/ capture done4_1
-	guard done4_1 == "done"
+	guard (done4_1 == "done")
 
 	send "shared-state-get" to p1
 	expect /shared-state-get (.*)/ from p1 capture s1b
@@ -194,4 +197,4 @@ test Contact:
 		/contact-list-item $c4_2 Custom2B Owner2/
 		/contact-list-item $c4_3 Custom3B Owner3/
 		/contact-list-(.*)/ capture done4_4
-	guard done4_4 == "done"
+	guard (done4_4 == "done")
