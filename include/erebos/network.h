@@ -6,7 +6,7 @@
 #include <functional>
 #include <typeinfo>
 
-struct sockaddr_in;
+struct sockaddr_in6;
 
 namespace erebos {
 
@@ -91,7 +91,9 @@ public:
 
 	std::string name() const;
 	std::optional<Identity> identity() const;
-	const struct sockaddr_in & address() const;
+	const struct sockaddr_in6 & address() const;
+	string addressStr() const;
+	uint16_t port() const;
 
 	bool hasChannel() const;
 	bool send(UUID, const Ref &) const;

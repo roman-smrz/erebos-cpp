@@ -104,10 +104,7 @@ string Peer::name() const
 		if (holds_alternative<shared_ptr<WaitingRef>>(speer->identity))
 			return string(std::get<shared_ptr<WaitingRef>>(speer->identity)->ref.digest());
 
-		char buf[16];
-		if (inet_ntop(AF_INET, &speer->addr.sin_addr, buf, sizeof(buf)))
-			return string(buf) + ":" + to_string(ntohs(speer->addr.sin_port));
-		return "<invalid address>";
+		return addressStr();
 	}
 	return "<server closed>";
 }
@@ -120,11 +117,30 @@ optional<Identity> Peer::identity() const
 	return nullopt;
 }
 
-const sockaddr_in & Peer::address() const
+const sockaddr_in6 & Peer::address() const
 {
 	if (auto speer = p->speer.lock())
 		return speer->addr;
 	throw runtime_error("Server no longer running");
+}
+
+string Peer::addressStr() const
+{
+	char buf[INET6_ADDRSTRLEN];
+	const in6_addr & addr = address().sin6_addr;
+
+	if (inet_ntop(AF_INET6, &addr, buf, sizeof(buf))) {
+		if (IN6_IS_ADDR_V4MAPPED(&addr) && strncmp(buf, "::ffff:", 7) == 0)
+			return buf + 7;
+		return buf;
+	}
+
+	return "<invalid address>";
+}
+
+uint16_t Peer::port() const
+{
+	return ntohs(address().sin6_port);
 }
 
 void Peer::Priv::notifyWatchers()
@@ -242,10 +258,16 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self):
 			bcastAddresses.push_back(((sockaddr_in*)ifa->ifa_broadaddr)->sin_addr);
 		}
 	}
-	
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
+
+	sock = socket(AF_INET6, SOCK_DGRAM, 0);
 	if (sock < 0)
 		throw std::system_error(errno, std::generic_category());
+
+	int disable = 0;
+	// Should be disabled by default, but try to make sure. On platforms
+	// where the calls fails, IPv4 might not work.
+	setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY,
+				&disable, sizeof(disable));
 
 	int enable = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST,
@@ -256,9 +278,9 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self):
 				&enable, sizeof(enable)) < 0)
 		throw std::system_error(errno, std::generic_category());
 
-	sockaddr_in laddr = {};
-	laddr.sin_family = AF_INET;
-	laddr.sin_port = htons(discoveryPort);
+	sockaddr_in6 laddr = {};
+	laddr.sin6_family = AF_INET6;
+	laddr.sin6_port = htons(discoveryPort);
 	if (::bind(sock, (sockaddr *) &laddr, sizeof(laddr)) < 0)
 		throw std::system_error(errno, std::generic_category());
 
@@ -296,7 +318,7 @@ void Server::Priv::doListen()
 	unique_lock lock(dataMutex);
 
 	for (; !finish; lock.lock()) {
-		sockaddr_in paddr;
+		sockaddr_in6 paddr;
 
 		lock.unlock();
 		socklen_t addrlen = sizeof(paddr);
@@ -390,16 +412,17 @@ void Server::Priv::doAnnounce()
 	}
 }
 
-bool Server::Priv::isSelfAddress(const sockaddr_in & paddr)
+bool Server::Priv::isSelfAddress(const sockaddr_in6 & paddr)
 {
-	for (const auto & in : localAddresses)
-		if (in.s_addr == paddr.sin_addr.s_addr &&
-				ntohs(paddr.sin_port) == discoveryPort)
-			return true;
+	if (IN6_IS_ADDR_V4MAPPED(&paddr.sin6_addr))
+		for (const auto & in : localAddresses)
+			if (in.s_addr == *reinterpret_cast<const in_addr_t*>(paddr.sin6_addr.s6_addr + 12) &&
+					ntohs(paddr.sin6_port) == discoveryPort)
+				return true;
 	return false;
 }
 
-Server::Peer & Server::Priv::getPeer(const sockaddr_in & paddr)
+Server::Peer & Server::Priv::getPeer(const sockaddr_in6 & paddr)
 {
 	for (auto & peer : peers)
 		if (memcmp(&peer->addr, &paddr, sizeof paddr) == 0)

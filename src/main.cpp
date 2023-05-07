@@ -303,10 +303,9 @@ void startServer(const vector<string> &)
 		if (peer) {
 			if (i >= testPeers.size()) {
 				testPeers.push_back(TestPeer { .peer = *peer, .id = i + 1 });
-				const auto & paddr = peer->address();
 
 				ostringstream ss;
-				ss << prefix << " addr " << inet_ntoa(paddr.sin_addr) << " " << ntohs(paddr.sin_port);
+				ss << prefix << " addr " << peer->addressStr() << " " << peer->port();
 				printLine(ss.str());
 			}
 

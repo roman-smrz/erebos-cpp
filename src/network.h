@@ -43,7 +43,7 @@ struct Server::Peer
 	Peer & operator=(const Peer &) = delete;
 
 	Priv & server;
-	const sockaddr_in addr;
+	const sockaddr_in6 addr;
 
 	variant<monostate,
 		shared_ptr<struct WaitingRef>,
@@ -151,8 +151,8 @@ struct Server::Priv
 	void doListen();
 	void doAnnounce();
 
-	bool isSelfAddress(const sockaddr_in & paddr);
-	Peer & getPeer(const sockaddr_in & paddr);
+	bool isSelfAddress(const sockaddr_in6 & paddr);
+	Peer & getPeer(const sockaddr_in6 & paddr);
 	void handlePacket(Peer &, const TransportHeader &, ReplyBuilder &);
 
 	void handleLocalHeadChange(const Head<LocalState> &);
