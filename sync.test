@@ -22,7 +22,7 @@ test:
 	send "attach-to 1" to p2
 	expect /attach-request 1 ([0-9]*)/ from p1 capture code1
 	expect /attach-response 1 ([0-9]*)/ from p2 capture code2
-	guard code1 == code2
+	guard (code1 == code2)
 
 	send "attach-accept 1" to p1
 	send "attach-accept 1" to p2

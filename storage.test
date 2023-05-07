@@ -11,7 +11,7 @@ test Storage:
 		""
 	expect from p1:
 		/store-done (blake2#[0-9a-f]*)/ capture r1
-	guard r1 == "blake2#c4a8c69fbc8398acf76a2ec1e5a191f339c4d03c3eb425af19d6d7d5efac6b8e"
+	guard (r1 == "blake2#c4a8c69fbc8398acf76a2ec1e5a191f339c4d03c3eb425af19d6d7d5efac6b8e")
 
 	send to p1:
 		"store rec"
@@ -112,25 +112,25 @@ test Storage:
 	expect from p1:
 		/stored-set-item $r1/
 		/stored-set-(.*)/ capture done1
-	guard done1 == "done"
+	guard (done1 == "done")
 
 	send to p1 "stored-set-list $s2"
 	expect from p1:
 		/stored-set-item $r2/
 		/stored-set-(.*)/ capture done2
-	guard done2 == "done"
+	guard (done2 == "done")
 
 	send to p1 "stored-set-list $s3"
 	expect from p1:
 		/stored-set-item $r2 $r3/
 		/stored-set-(.*)/ capture done3
-	guard done3 == "done"
+	guard (done3 == "done")
 
 	send to p1 "stored-set-list $s4"
 	expect from p1:
 		/stored-set-item $r4/
 		/stored-set-(.*)/ capture done4
-	guard done4 == "done"
+	guard (done4 == "done")
 
 
 	send to p1 "stored-set-add $r2_2 $s4"
@@ -143,13 +143,13 @@ test Storage:
 		/stored-set-item $r4/
 		/stored-set-item $r2_2/
 		/stored-set-(.*)/ capture done5
-	guard done5 == "done"
+	guard (done5 == "done")
 
 	send to p1 "stored-set-list $s6"
 	expect from p1:
 		/stored-set-item $r2_3/
 		/stored-set-(.*)/ capture done6
-	guard done6 == "done"
+	guard (done6 == "done")
 
 
 test StorageWatcher:
@@ -174,7 +174,7 @@ test StorageWatcher:
 		send "attach-to 1" to p2
 		expect /attach-request 1 ([0-9]*)/ from p1 capture code1
 		expect /attach-response 1 ([0-9]*)/ from p2 capture code2
-		guard code1 == code2
+		guard (code1 == code2)
 
 	send "attach-accept 1" to p1
 	send "attach-accept 1" to p2
