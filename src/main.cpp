@@ -328,6 +328,16 @@ void stopServer(const vector<string> &)
 	server.reset();
 }
 
+void peerAdd(const vector<string> & args)
+{
+	if (args.size() == 1)
+		server->addPeer(args.at(0));
+	else if (args.size() == 2)
+		server->addPeer(args.at(0), args.at(1));
+	else
+		throw invalid_argument("usage: peer-add <node> [<port>]");
+}
+
 void sharedStateGet(const vector<string> &)
 {
 	ostringstream ss;
@@ -530,6 +540,7 @@ vector<Command> commands = {
 	{ "create-identity", createIdentity },
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },
+	{ "peer-add", peerAdd },
 	{ "shared-state-get", sharedStateGet },
 	{ "shared-state-wait", sharedStateWait },
 	{ "watch-local-identity", watchLocalIdentity },

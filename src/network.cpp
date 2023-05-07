@@ -11,6 +11,9 @@
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 using std::get;
@@ -68,6 +71,43 @@ Service & Server::svcHelper(const std::type_info & tinfo)
 PeerList & Server::peerList() const
 {
 	return p->plist;
+}
+
+void Server::addPeer(const string & node) const
+{
+	return addPeer(node, to_string(Priv::discoveryPort));
+}
+
+void Server::addPeer(const string & node, const string & service) const
+{
+	addrinfo hints {};
+	hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+	hints.ai_family = AF_INET6;
+	hints.ai_socktype = SOCK_DGRAM;
+	addrinfo *aptr;
+
+	int r = getaddrinfo(node.c_str(), service.c_str(), &hints, &aptr);
+	if (r != 0)
+		throw runtime_error(string("Server::addPeer: getaddrinfo failed: ") + gai_strerror(r));
+
+	unique_ptr<addrinfo, void(*)(addrinfo*)> result { aptr, &freeaddrinfo };
+
+	for (addrinfo * rp = result.get(); rp != nullptr; rp = rp->ai_next) {
+		if (rp->ai_family == AF_INET6) {
+			Peer & peer = p->getPeer(*(sockaddr_in6 *)rp->ai_addr);
+
+			vector<TransportHeader::Item> header;
+			{
+				shared_lock lock(p->selfMutex);
+				header.push_back(TransportHeader::Item {
+					TransportHeader::Type::AnnounceSelf, *p->self.ref() });
+			}
+			peer.send(header, {}, false);
+			return;
+		}
+	}
+
+	throw runtime_error("Server::addPeer: no suitable peer address found");
 }
 
 
@@ -424,6 +464,8 @@ bool Server::Priv::isSelfAddress(const sockaddr_in6 & paddr)
 
 Server::Peer & Server::Priv::getPeer(const sockaddr_in6 & paddr)
 {
+	scoped_lock lock(dataMutex);
+
 	for (auto & peer : peers)
 		if (memcmp(&peer->addr, &paddr, sizeof paddr) == 0)
 			return *peer;

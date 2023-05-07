@@ -14,6 +14,7 @@ using std::vector;
 using std::unique_ptr;
 
 class ServerConfig;
+class Peer;
 
 class Server
 {
@@ -33,6 +34,8 @@ public:
 	template<class S> S & svc();
 
 	class PeerList & peerList() const;
+	void addPeer(const string & node) const;
+	void addPeer(const string & node, const string & service) const;
 
 	struct Peer;
 private:
