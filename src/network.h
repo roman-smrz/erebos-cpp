@@ -67,6 +67,7 @@ struct Server::Peer
 	void send(const struct TransportHeader &, const vector<Object> &, bool secure);
 	void updateIdentity(ReplyBuilder &);
 	void updateChannel(ReplyBuilder &);
+	void finalizeChannel(ReplyBuilder &, unique_ptr<Channel>);
 	void updateService(ReplyBuilder &);
 	void trySendOutQueue();
 };
@@ -106,6 +107,9 @@ struct TransportHeader
 	struct Item {
 		const Type type;
 		const variant<PartialRef, UUID> value;
+
+		bool operator==(const Item &) const;
+		bool operator!=(const Item & other) const { return !(*this == other); }
 	};
 
 	TransportHeader(const vector<Item> & items): items(items) {}

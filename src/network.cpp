@@ -499,8 +499,8 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 			if (auto pref = std::get<PartialRef>(item.value)) {
 				if (holds_alternative<Stored<ChannelAccept>>(peer.channel) &&
 						std::get<Stored<ChannelAccept>>(peer.channel).ref().digest() == pref.digest())
-					peer.channel.emplace<unique_ptr<Channel>>
-						(std::get<Stored<ChannelAccept>>(peer.channel)->data->channel());
+					peer.finalizeChannel(reply,
+						std::get<Stored<ChannelAccept>>(peer.channel)->data->channel());
 			}
 			break;
 
@@ -607,7 +607,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 					if (holds_alternative<Identity>(peer.identity) &&
 							acc.isSignedBy(std::get<Identity>(peer.identity).keyMessage())) {
 						reply.header({ TransportHeader::Type::Acknowledged, pref });
-						peer.channel.emplace<unique_ptr<Channel>>(acc.data->channel());
+						peer.finalizeChannel(reply, acc.data->channel());
 					}
 				}
 			}
@@ -767,6 +767,19 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 	}
 }
 
+void Server::Peer::finalizeChannel(ReplyBuilder & reply, unique_ptr<Channel> ch)
+{
+	channel.emplace<unique_ptr<Channel>>(move(ch));
+
+	vector<TransportHeader::Item> hitems;
+	for (const auto & r : server.self.refs())
+		reply.header(TransportHeader::Item {
+			TransportHeader::Type::AnnounceUpdate, r });
+	for (const auto & r : server.self.updates())
+		reply.header(TransportHeader::Item {
+			TransportHeader::Type::AnnounceUpdate, r });
+}
+
 void Server::Peer::updateService(ReplyBuilder & reply)
 {
 	decltype(serviceQueue) next;
@@ -823,7 +836,7 @@ void Server::Peer::trySendOutQueue()
 void ReplyBuilder::header(TransportHeader::Item && item)
 {
 	for (const auto & x : mheader)
-		if (x.type == item.type && x.value == item.value)
+		if (x == item)
 			return;
 	mheader.emplace_back(std::move(item));
 }
@@ -870,6 +883,24 @@ optional<Ref> WaitingRef::check(ReplyBuilder & reply)
 	return nullopt;
 }
 
+
+bool TransportHeader::Item::operator==(const Item & other) const
+{
+	if (type != other.type)
+		return false;
+
+	if (value.index() != other.value.index())
+		return false;
+
+	if (holds_alternative<PartialRef>(value))
+		return std::get<PartialRef>(value).digest() ==
+			std::get<PartialRef>(other.value).digest();
+
+	if (holds_alternative<UUID>(value))
+		return std::get<UUID>(value) == std::get<UUID>(other.value);
+
+	throw runtime_error("unhandled transport header item type");
+}
 
 optional<TransportHeader> TransportHeader::load(const PartialRef & ref)
 {
