@@ -64,7 +64,7 @@ test:
 		expect:
 			/local-identity Device3/
 			/peer 1 addr ${p1.node.ip} 29665/
-			/peer 1 id Device1 .*/
+			/peer 1 id Device1 NewOwner3/
 
 		expect from p1:
 			/peer 2 addr ${p3.node.ip} 29665/
