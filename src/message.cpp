@@ -1,5 +1,6 @@
 #include "message.h"
 
+#include <erebos/contact.h>
 #include <erebos/network.h>
 
 using namespace erebos;
@@ -246,26 +247,37 @@ DirectMessageThread DirectMessageService::thread(const Identity & peer)
 	return DirectMessageThread::Priv::getThreadLocked(peer.finalOwner());
 }
 
-DirectMessage DirectMessageService::send(const Peer & peer, const string & text)
+DirectMessage DirectMessageService::send(const Identity & to, const string & text)
 {
-	auto pid = peer.identity();
-	if (!pid)
-		throw std::runtime_error("Peer without known identity");
-	auto powner = pid->finalOwner();
-
 	scoped_lock lock(threadLock);
 
 	auto msg = server.localHead().ref().storage().store(DirectMessageData {
-		.prev = DirectMessageThread::Priv::getThreadLocked(powner).p->head,
+		.prev = DirectMessageThread::Priv::getThreadLocked(to).p->head,
 		.from = server.identity().finalOwner(),
 		.time = ZonedTime::now(),
 		.text = text,
 	});
 
-	DirectMessageThread::Priv::updateThreadLocked(powner, { msg });
-	peer.send(myUUID, msg.ref());
+	DirectMessageThread::Priv::updateThreadLocked(to, { msg });
+
+	if (auto peer = server.peer(to))
+		peer->send(myUUID, msg.ref());
 
 	return DirectMessage(new DirectMessage::Priv {
 		.data = msg,
 	});
+}
+
+DirectMessage DirectMessageService::send(const Contact & to, const string & text)
+{
+	if (auto id = to.identity())
+		return send(*id, text);
+	throw std::runtime_error("contact without erebos identity");
+}
+
+DirectMessage DirectMessageService::send(const Peer & to, const string & text)
+{
+	if (auto id = to.identity())
+		return send(id->finalOwner(), text);
+	throw std::runtime_error("peer without known identity");
 }

@@ -73,6 +73,20 @@ PeerList & Server::peerList() const
 	return p->plist;
 }
 
+optional<Peer> Server::peer(const Identity & identity) const
+{
+	scoped_lock lock(p->dataMutex);
+
+	for (auto & peer : p->peers) {
+		const auto & pid = peer->identity;
+		if (holds_alternative<Identity>(pid))
+			if (std::get<Identity>(pid).finalOwner().sameAs(identity))
+				return peer->lpeer;
+	}
+
+	return nullopt;
+}
+
 void Server::addPeer(const string & node) const
 {
 	return addPeer(node, to_string(Priv::discoveryPort));

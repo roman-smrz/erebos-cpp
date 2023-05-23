@@ -12,6 +12,7 @@ namespace erebos {
 
 using std::unique_ptr;
 
+class Contact;
 class Identity;
 
 class DirectMessage
@@ -94,6 +95,8 @@ public:
 
 	DirectMessageThread thread(const Identity &);
 
+	DirectMessage send(const Identity &, const std::string &);
+	DirectMessage send(const Contact &, const std::string &);
 	DirectMessage send(const Peer &, const std::string &);
 
 private:

@@ -104,6 +104,22 @@ TestPeer & getPeer(const Peer & peer)
 	throw invalid_argument("peer not found");
 }
 
+Contact getContact(const string & id)
+{
+	auto cmp = [](const Contact & x, const Contact & y) {
+		return x.data() < y.data();
+	};
+	for (const auto & c : h->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
+		if (string(c.leastRoot()) == id) {
+			return c;
+		}
+	}
+
+	ostringstream ss;
+	ss << "contact '" << id << "' not found";
+	throw invalid_argument(ss.str().c_str());
+}
+
 struct Command
 {
 	string name;
@@ -505,22 +521,16 @@ void contactSetName(const vector<string> & args)
 	auto id = args.at(0);
 	auto name = args.at(1);
 
-	auto cmp = [](const Contact & x, const Contact & y) {
-		return x.data() < y.data();
-	};
-	for (const auto & c : h->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
-		if (string(c.leastRoot()) == id) {
-			auto nh = h->update([&] (const Stored<LocalState> & loc) {
-				auto st = loc.ref().storage();
-				auto cc = c.customName(st, name);
-				auto contacts = loc->shared<Set<Contact>>();
-				return st.store(loc->shared<Set<Contact>>(contacts.add(st, cc)));
-			});
-			if (nh)
-				*h = *nh;
-			break;
-		}
-	}
+	auto c = getContact(id);
+	auto nh = h->update([&] (const Stored<LocalState> & loc) {
+		auto st = loc.ref().storage();
+		auto cc = c.customName(st, name);
+		auto contacts = loc->shared<Set<Contact>>();
+		return st.store(loc->shared<Set<Contact>>(contacts.add(st, cc)));
+	});
+	if (nh)
+		*h = *nh;
+
 	printLine("contact-set-name-done");
 }
 
@@ -528,6 +538,13 @@ void dmSendPeer(const vector<string> & args)
 {
 	server->svc<DirectMessageService>().send(
 			getPeer(args.at(0)).peer,
+			args.at(1));
+}
+
+void dmSendContact(const vector<string> & args)
+{
+	server->svc<DirectMessageService>().send(
+			getContact(args.at(0)),
 			args.at(1));
 }
 
@@ -556,6 +573,7 @@ vector<Command> commands = {
 	{ "contact-list", contactList },
 	{ "contact-set-name", contactSetName },
 	{ "dm-send-peer", dmSendPeer },
+	{ "dm-send-contact", dmSendContact },
 };
 
 }

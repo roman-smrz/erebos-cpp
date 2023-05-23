@@ -34,6 +34,7 @@ public:
 	template<class S> S & svc();
 
 	class PeerList & peerList() const;
+	optional<erebos::Peer> peer(const Identity &) const;
 	void addPeer(const string & node) const;
 	void addPeer(const string & node, const string & service) const;
 
