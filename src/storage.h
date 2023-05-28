@@ -45,6 +45,24 @@ public:
 	virtual void storeKey(const Digest &, const vector<uint8_t> &) = 0;
 };
 
+class StorageWatchCallback
+{
+public:
+	StorageWatchCallback(int id, const function<void(UUID, const Digest &)> callback):
+		id(id), callback(callback) {}
+
+	void schedule(UUID, const Digest &);
+	void run();
+
+	const int id;
+
+private:
+	const function<void(UUID, const Digest &)> callback;
+
+	std::recursive_mutex runMutex;
+	optional<tuple<UUID, Digest>> scheduled;
+};
+
 class FilesystemStorage : public StorageBackend
 {
 public:
@@ -85,7 +103,7 @@ private:
 	int inotify = -1;
 	int inotifyWakeup = -1;
 	int nextWatcherId = 1;
-	unordered_multimap<UUID, tuple<int, function<void(UUID id, const Digest &)>>> watchers;
+	unordered_multimap<UUID, shared_ptr<StorageWatchCallback>> watchers;
 	unordered_map<int, UUID> watchMap;
 };
 
@@ -117,7 +135,7 @@ private:
 
 	mutex watcherLock;
 	int nextWatcherId = 1;
-	unordered_multimap<UUID, tuple<int, function<void(UUID id, const Digest &)>>> watchers;
+	unordered_multimap<UUID, shared_ptr<StorageWatchCallback>> watchers;
 };
 
 class ChainStorage : public StorageBackend

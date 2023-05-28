@@ -563,6 +563,9 @@ private:
 	Stored<T> mstored;
 };
 
+/**
+ * Manages registered watch callbacks to Head<T> object using RAII principle.
+ */
 template<class T>
 class WatchedHead : public Head<T>
 {
@@ -590,6 +593,18 @@ public:
 		static_cast<Head<T> &>(*this) = h;
 		return *this;
 	}
+
+	/// Destructor stops the watching started with Head<T>::watch call.
+	/**
+	 * Once the WatchedHead object is destroyed, no further Head<T> changes
+	 * will trigger the associated callback.
+	 *
+	 * The destructor also ensures that any scheduled callback run
+	 * triggered by a previous change to the head is executed and finished
+	 * before the destructor returns. The exception is when the destructor
+	 * is called directly from the callback itself, in which case the
+	 * destructor returns immediately.
+	 */
 	~WatchedHead();
 };
 

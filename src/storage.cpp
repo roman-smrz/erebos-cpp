@@ -39,6 +39,23 @@ using std::system_error;
 using std::to_string;
 using std::weak_ptr;
 
+void StorageWatchCallback::schedule(UUID uuid, const Digest & dgst)
+{
+	scoped_lock lock(runMutex);
+	scheduled.emplace(uuid, dgst);
+}
+
+void StorageWatchCallback::run()
+{
+	scoped_lock lock(runMutex);
+	if (scheduled) {
+		auto [uuid, dgst] = *scheduled;
+		scheduled.reset(); // avoid running the callback twice
+
+		callback(uuid, dgst);
+	}
+}
+
 FilesystemStorage::FilesystemStorage(const fs::path & path):
 	root(path)
 {
@@ -278,36 +295,45 @@ int FilesystemStorage::watchHead(UUID type, const function<void(UUID id, const D
 
 		watchMap[wd] = type;
 	}
-	watchers.emplace(type, tuple(wid, watcher));
+	watchers.emplace(type, make_shared<StorageWatchCallback>(wid, watcher));
 
 	return wid;
 }
 
 void FilesystemStorage::unwatchHead(UUID type, int wid)
 {
-	scoped_lock lock(watcherLock);
+	shared_ptr<StorageWatchCallback> cb;
 
-	if (inotify < 0)
-		return;
+	{
+		scoped_lock lock(watcherLock);
 
-	auto range = watchers.equal_range(type);
-	for (auto it = range.first; it != range.second; it++) {
-		if (std::get<0>(it->second) == wid) {
-			watchers.erase(it);
-			break;
-		}
-	}
+		if (inotify < 0)
+			return;
 
-	if (watchers.find(type) == watchers.end()) {
-		for (auto it = watchMap.begin(); it != watchMap.end(); it++) {
-			if (it->second == type) {
-				if (inotify_rm_watch(inotify, it->first) < 0)
-					throw system_error(errno, std::generic_category());
-				watchMap.erase(it);
+		auto range = watchers.equal_range(type);
+		for (auto it = range.first; it != range.second; it++) {
+			if (it->second->id == wid) {
+				cb = move(it->second);
+				watchers.erase(it);
 				break;
 			}
 		}
+
+		if (watchers.find(type) == watchers.end()) {
+			for (auto it = watchMap.begin(); it != watchMap.end(); it++) {
+				if (it->second == type) {
+					if (inotify_rm_watch(inotify, it->first) < 0)
+						throw system_error(errno, std::generic_category());
+					watchMap.erase(it);
+					break;
+				}
+			}
+		}
 	}
+
+	// Run the last callback if scheduled and not yet executed
+	if (cb)
+		cb->run();
 }
 
 optional<vector<uint8_t>> FilesystemStorage::loadKey(const Digest & pubref) const
@@ -367,9 +393,7 @@ void FilesystemStorage::inotifyWatch()
 			event = (const struct inotify_event *) ptr;
 
 			if (event->mask & IN_MOVED_TO) {
-				vector<function<void(UUID id, const Digest &)>> callbacks;
-				optional<UUID> mbid;
-				optional<Digest> mbref;
+				vector<shared_ptr<StorageWatchCallback>> callbacks;
 
 				{
 					// Copy relevant callbacks to temporary array, so they
@@ -377,17 +401,19 @@ void FilesystemStorage::inotifyWatch()
 
 					scoped_lock lock(watcherLock);
 					UUID type = watchMap[event->wd];
-					if ((mbid = UUID::fromString(event->name))) {
-						if ((mbref = headRef(type, *mbid))) {
+					if (auto mbid = UUID::fromString(event->name)) {
+						if (auto mbref = headRef(type, *mbid)) {
 							auto range = watchers.equal_range(type);
-							for (auto it = range.first; it != range.second; it++)
-								callbacks.push_back(std::get<1>(it->second));
+							for (auto it = range.first; it != range.second; it++) {
+								it->second->schedule(*mbid, *mbref);
+								callbacks.push_back(it->second);
+							}
 						}
 					}
 				}
 
 				for (const auto & cb : callbacks)
-					cb(*mbid, *mbref);
+					cb->run();
 			}
 		}
 	}
@@ -512,21 +538,30 @@ int MemoryStorage::watchHead(UUID type, const function<void(UUID id, const Diges
 {
 	scoped_lock lock(watcherLock);
 	int wid = nextWatcherId++;
-	watchers.emplace(type, tuple(wid, watcher));
+	watchers.emplace(type, make_shared<StorageWatchCallback>(wid, watcher));
 	return wid;
 }
 
 void MemoryStorage::unwatchHead(UUID type, int wid)
 {
-	scoped_lock lock(watcherLock);
+	shared_ptr<StorageWatchCallback> cb;
 
-	auto range = watchers.equal_range(type);
-	for (auto it = range.first; it != range.second; it++) {
-		if (std::get<0>(it->second) == wid) {
-			watchers.erase(it);
-			break;
+	{
+		scoped_lock lock(watcherLock);
+
+		auto range = watchers.equal_range(type);
+		for (auto it = range.first; it != range.second; it++) {
+			if (it->second->id == wid) {
+				cb = move(it->second);
+				watchers.erase(it);
+				break;
+			}
 		}
 	}
+
+	// Run the last callback if scheduled and not yet executed
+	if (cb)
+		cb->run();
 }
 
 optional<vector<uint8_t>> MemoryStorage::loadKey(const Digest & digest) const
