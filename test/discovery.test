@@ -23,3 +23,23 @@ test:
 
 	send "update-shared-identity OwnerB" to p1
 	expect /peer 1 id Device1B OwnerB/ from p2
+
+	with p2:
+		send "stop-server"
+		expect /stop-server-done/
+
+	send "update-shared-identity OwnerC" to p1
+
+	with p1:
+		send "stop-server"
+		expect /stop-server-done/
+
+	send "start-server" to p1
+	send "start-server" to p2
+
+	expect from p1:
+		/peer 1 addr ${p2.node.ip} 29665/
+		/peer 1 id Device2/
+	expect from p2:
+		/peer 1 addr ${p1.node.ip} 29665/
+		/peer 1 id Device1B OwnerC/

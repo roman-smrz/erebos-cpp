@@ -342,6 +342,8 @@ void startServer(const vector<string> &)
 void stopServer(const vector<string> &)
 {
 	server.reset();
+	testPeers.clear();
+	printLine("stop-server-done");
 }
 
 void peerAdd(const vector<string> & args)
