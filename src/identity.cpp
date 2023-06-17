@@ -239,14 +239,9 @@ void Identity::Builder::owner(const Identity & val)
 IdentityData IdentityData::load(const Ref & ref)
 {
 	if (auto rec = ref->asRecord()) {
-		vector<Stored<Signed<IdentityData>>> prev;
-		for (auto p : rec->items("SPREV"))
-			if (const auto & x = p.as<Signed<IdentityData>>())
-				prev.push_back(x.value());
-
 		if (auto keyIdentity = rec->item("key-id").as<PublicKey>())
 			return IdentityData {
-				.prev = std::move(prev),
+				.prev = rec->items("SPREV").as<Signed<IdentityData>>(),
 				.name = rec->item("name").asText(),
 				.owner = rec->item("owner").as<Signed<IdentityData>>(),
 				.keyIdentity = keyIdentity.value(),

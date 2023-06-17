@@ -22,9 +22,7 @@ LocalState::LocalState(const Ref & ref):
 	if (auto x = rec->item("id").asRef())
 		p->identity = Identity::load(*x);
 
-	for (auto i : rec->items("shared"))
-		if (const auto & x = i.as<SharedData>())
-			p->shared.tip.push_back(*x);
+	p->shared.tip = rec->items("shared").as<SharedData>();
 
 	if (p->identity) {
 		vector<Stored<Signed<IdentityData>>> updates;
@@ -158,16 +156,10 @@ SharedData::SharedData(const Ref & ref)
 	if (!rec)
 		return;
 
-	for (auto i : rec->items("PREV"))
-		if (const auto & x = i.as<SharedData>())
-			prev.push_back(*x);
-
+	prev = rec->items("PREV").as<SharedData>();
 	if (auto x = rec->item("type").asUUID())
 		type = *x;
-
-	for (auto i : rec->items("value"))
-		if (const auto & x = i.asRef())
-			value.push_back(*x);
+	value = rec->items("value").asRef();
 }
 
 Ref SharedData::store(const Storage & st) const

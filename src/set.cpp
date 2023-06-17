@@ -153,19 +153,9 @@ vector<Ref> SetBase::store() const
 SetItem SetItem::load(const Ref & ref)
 {
 	if (auto rec = ref->asRecord()) {
-		vector<Stored<SetItem>> prev;
-		for (auto p : rec->items("PREV"))
-			if (const auto & x = p.as<SetItem>())
-				prev.push_back(*x);
-
-		vector<Ref> item;
-		for (auto i : rec->items("item"))
-			if (const auto & x = i.asRef())
-				item.push_back(*x);
-
 		return SetItem {
-			.prev = std::move(prev),
-			.item = std::move(item),
+			.prev = rec->items("PREV").as<SetItem>(),
+			.item = rec->items("item").asRef(),
 		};
 	}
 

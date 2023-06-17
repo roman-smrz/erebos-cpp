@@ -105,14 +105,9 @@ AttachIdentity AttachIdentity::load(const Ref & ref)
 			.keys = {},
 		};
 
-	vector<vector<uint8_t>> keys;
-	for (auto s : rec->items("skey"))
-		if (const auto & b = s.asBinary())
-			keys.push_back(*b);
-
 	return AttachIdentity {
 		.identity = *rec->item("identity").as<Signed<IdentityData>>(),
-		.keys = keys,
+		.keys = rec->items("skey").asBinary(),
 	};
 }
 

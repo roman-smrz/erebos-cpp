@@ -110,10 +110,9 @@ Signed<T> Signed<T>::load(const Ref & ref)
 	if (auto rec = ref->asRecord())
 		if (auto data = rec->item("SDATA").as<T>()) {
 			vector<Stored<Signature>> sigs;
-			for (auto item : rec->items("sig"))
-				if (auto sig = item.as<Signature>())
-					if (sig.value()->verify(data.value().ref()))
-						sigs.push_back(sig.value());
+			for (const auto & sig : rec->items("sig").as<Signature>())
+				if (sig->verify(data.value().ref()))
+					sigs.push_back(sig);
 
 			return Signed(*data, sigs);
 		}

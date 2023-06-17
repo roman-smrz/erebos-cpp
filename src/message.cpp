@@ -55,15 +55,10 @@ DirectMessageData DirectMessageData::load(const Ref & ref)
 	if (!rec)
 		return DirectMessageData();
 
-	vector<Stored<DirectMessageData>> prev;
-	for (auto p : rec->items("PREV"))
-		if (const auto & x = p.as<DirectMessageData>())
-			prev.push_back(*x);
-
 	auto fref = rec->item("from").asRef();
 
 	return DirectMessageData {
-		.prev = std::move(prev),
+		.prev = rec->items("PREV").as<DirectMessageData>(),
 		.from = fref ? Identity::load(*fref) : nullopt,
 		.time = *rec->item("time").asDate(),
 		.text = rec->item("text").asText().value(),

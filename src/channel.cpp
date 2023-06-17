@@ -26,15 +26,10 @@ Ref ChannelRequestData::store(const Storage & st) const
 ChannelRequestData ChannelRequestData::load(const Ref & ref)
 {
 	if (auto rec = ref->asRecord()) {
-		remove_const<decltype(peers)>::type peers;
-		for (const auto & i : rec->items("peer"))
-			if (auto p = i.as<Signed<IdentityData>>())
-				peers.push_back(*p);
-
 		if (rec->item("enc").asText() == "aes-128-gcm")
 			if (auto key = rec->item("key").as<PublicKexKey>())
 				return ChannelRequestData {
-					.peers = std::move(peers),
+					.peers = rec->items("peer").as<Signed<IdentityData>>(),
 					.key = *key,
 				};
 	}

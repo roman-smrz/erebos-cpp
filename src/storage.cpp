@@ -789,10 +789,9 @@ optional<Digest> Storage::Priv::copy(const ObjectT<S> & pobj, vector<Digest> * m
 {
 	bool fail = false;
 	if (auto rec = pobj.asRecord())
-		for (const auto & item : rec->items())
-			if (auto r = item.asRef())
-				if (!copy<S>(*r, missing))
-					fail = true;
+		for (const auto & r : rec->items().asRef())
+			if (!copy<S>(r, missing))
+				fail = true;
 
 	if (fail)
 		return nullopt;
@@ -1032,24 +1031,13 @@ vector<Ref> Ref::previous() const
 	if (!rec)
 		return {};
 
-	vector<Ref> res;
-
-	auto sdata = rec->item("SDATA").asRef();
-	if (sdata) {
-		auto drec = sdata.value()->asRecord();
-		if (!drec)
-			return {};
-
-		for (const Record::Item & i : drec->items("SPREV"))
-			if (auto x = i.asRef())
-				res.push_back(*x);
-		return res;
+	if (auto sdata = rec->item("SDATA").asRef()) {
+		if (auto drec = sdata.value()->asRecord())
+			return drec->items("SPREV").asRef();
+		return {};
 	}
 
-	for (const Record::Item & i : rec->items("PREV"))
-		if (auto x = i.asRef())
-			res.push_back(*x);
-	return res;
+	return rec->items("PREV").asRef();
 }
 
 Generation Ref::generation() const
@@ -1177,6 +1165,125 @@ optional<typename RecordT<S>::Item::UnknownType> RecordT<S>::Item::asUnknown() c
 	return nullopt;
 }
 
+template<class S>
+RecordT<S>::Items::Items(shared_ptr<const vector<Item>> items):
+	items(move(items)), filter(nullopt)
+{}
+
+template<class S>
+RecordT<S>::Items::Items(shared_ptr<const vector<Item>> items, string filter):
+	items(move(items)), filter(move(filter))
+{}
+
+template<class S>
+RecordT<S>::Items::Iterator::Iterator(const Items & source, size_t idx):
+	source(source), idx(idx)
+{}
+
+template<class S>
+typename RecordT<S>::Items::Iterator & RecordT<S>::Items::Iterator::operator++()
+{
+	const auto & items = *source.items;
+	do {
+		idx++;
+	} while (idx < items.size() &&
+			source.filter &&
+			items[idx].name != *source.filter);
+	return *this;
+}
+
+template<class S>
+typename RecordT<S>::Items::Iterator RecordT<S>::Items::begin() const
+{
+	return ++Iterator(*this, -1);
+}
+
+template<class S>
+typename RecordT<S>::Items::Iterator RecordT<S>::Items::end() const
+{
+	return Iterator(*this, items->size());
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::Empty> RecordT<S>::Items::asEmpty() const
+{
+	vector<Empty> res;
+	for (const auto & item : *this)
+		if (holds_alternative<Empty>(item.value))
+			res.push_back(std::get<Empty>(item.value));
+	return res;
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::Integer> RecordT<S>::Items::asInteger() const
+{
+	vector<Integer> res;
+	for (const auto & item : *this)
+		if (holds_alternative<Integer>(item.value))
+			res.push_back(std::get<Integer>(item.value));
+	return res;
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::Text> RecordT<S>::Items::asText() const
+{
+	vector<Text> res;
+	for (const auto & item : *this)
+		if (holds_alternative<Text>(item.value))
+			res.push_back(std::get<Text>(item.value));
+	return res;
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::Binary> RecordT<S>::Items::asBinary() const
+{
+	vector<Binary> res;
+	for (const auto & item : *this)
+		if (holds_alternative<Binary>(item.value))
+			res.push_back(std::get<Binary>(item.value));
+	return res;
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::Date> RecordT<S>::Items::asDate() const
+{
+	vector<Date> res;
+	for (const auto & item : *this)
+		if (holds_alternative<Date>(item.value))
+			res.push_back(std::get<Date>(item.value));
+	return res;
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::UUID> RecordT<S>::Items::asUUID() const
+{
+	vector<UUID> res;
+	for (const auto & item : *this)
+		if (holds_alternative<UUID>(item.value))
+			res.push_back(std::get<UUID>(item.value));
+	return res;
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::Ref> RecordT<S>::Items::asRef() const
+{
+	vector<Ref> res;
+	for (const auto & item : *this)
+		if (holds_alternative<Ref>(item.value))
+			res.push_back(std::get<Ref>(item.value));
+	return res;
+}
+
+template<class S>
+vector<typename RecordT<S>::Item::UnknownType> RecordT<S>::Items::asUnknown() const
+{
+	vector<UnknownType> res;
+	for (const auto & item : *this)
+		if (holds_alternative<UnknownType>(item.value))
+			res.push_back(std::get<UnknownType>(item.value));
+	return res;
+}
+
 
 template<class S>
 RecordT<S>::RecordT(const vector<Item> & from):
@@ -1274,9 +1381,9 @@ vector<uint8_t> RecordT<S>::encode() const
 }
 
 template<class S>
-const vector<typename RecordT<S>::Item> & RecordT<S>::items() const
+typename RecordT<S>::Items RecordT<S>::items() const
 {
-	return *ptr;
+	return Items(ptr);
 }
 
 template<class S>
@@ -1296,14 +1403,9 @@ typename RecordT<S>::Item RecordT<S>::operator[](const string & name) const
 }
 
 template<class S>
-vector<typename RecordT<S>::Item> RecordT<S>::items(const string & name) const
+typename RecordT<S>::Items RecordT<S>::items(const string & name) const
 {
-	vector<Item> res;
-	for (auto item : *ptr) {
-		if (item.name == name)
-			res.push_back(item);
-	}
-	return res;
+	return Items(ptr, name);
 }
 
 template<class S>
@@ -1544,9 +1646,8 @@ vector<Stored<Object>> erebos::collectStoredObjects(const Stored<Object> & from)
 		res.push_back(cur);
 
 		if (auto rec = cur->asRecord())
-			for (const auto & item : rec->items())
-				if (auto ref = item.asRef())
-					queue.push_back(Stored<Object>::load(*ref));
+			for (const auto & ref : rec->items().asRef())
+				queue.push_back(Stored<Object>::load(ref));
 	}
 
 	return res;

@@ -111,19 +111,9 @@ ContactData ContactData::load(const Ref & ref)
 	if (!rec)
 		return ContactData();
 
-	vector<Stored<ContactData>> prev;
-	for (const auto & x : rec->items("PREV"))
-		if (const auto & p = x.as<ContactData>())
-			prev.push_back(*p);
-
-	vector<Stored<Signed<IdentityData>>> identity;
-	for (const auto & x : rec->items("identity"))
-		if (const auto & i = x.asRef())
-			identity.push_back(*i);
-
 	return ContactData {
-		.prev = std::move(prev),
-		.identity = std::move(identity),
+		.prev = rec->items("PREV").as<ContactData>(),
+		.identity = rec->items("identity").as<Signed<IdentityData>>(),
 		.name = rec->item("name").asText(),
 	};
 }

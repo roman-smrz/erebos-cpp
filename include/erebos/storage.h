@@ -40,8 +40,12 @@ template<typename T> class Head;
 using std::bind;
 using std::call_once;
 using std::make_unique;
+using std::monostate;
 using std::move;
+using std::optional;
+using std::shared_ptr;
 using std::string;
+using std::variant;
 using std::vector;
 
 class PartialStorage
@@ -222,54 +226,8 @@ template<class S>
 class RecordT
 {
 public:
-	class Item {
-	public:
-		struct UnknownType
-		{
-			std::string type;
-			std::string value;
-		};
-
-		struct Empty {};
-
-		typedef std::variant<
-			std::monostate,
-			Empty,
-			int,
-			std::string,
-			std::vector<uint8_t>,
-			ZonedTime,
-			UUID,
-			typename S::Ref,
-			UnknownType> Variant;
-
-		Item(const std::string & name):
-			Item(name, std::monostate()) {}
-		Item(const std::string & name, Variant value):
-			name(name), value(value) {}
-		template<typename T>
-		Item(const std::string & name, const Stored<T> & value):
-			Item(name, value.ref()) {}
-
-		Item(const Item &) = default;
-		Item & operator=(const Item &) = delete;
-
-		operator bool() const;
-
-		std::optional<Empty> asEmpty() const;
-		std::optional<int> asInteger() const;
-		std::optional<std::string> asText() const;
-		std::optional<std::vector<uint8_t>> asBinary() const;
-		std::optional<ZonedTime> asDate() const;
-		std::optional<UUID> asUUID() const;
-		std::optional<typename S::Ref> asRef() const;
-		std::optional<UnknownType> asUnknown() const;
-
-		template<typename T> std::optional<Stored<T>> as() const;
-
-		const std::string name;
-		const Variant value;
-	};
+	class Item;
+	class Items;
 
 private:
 	RecordT(const std::shared_ptr<std::vector<Item>> & ptr):
@@ -280,10 +238,10 @@ public:
 	RecordT(std::vector<Item> &&);
 	std::vector<uint8_t> encode() const;
 
-	const std::vector<Item> & items() const;
+	Items items() const;
 	Item item(const std::string & name) const;
 	Item operator[](const std::string & name) const;
-	std::vector<Item> items(const std::string & name) const;
+	Items items(const std::string & name) const;
 
 private:
 	friend ObjectT<S>;
@@ -293,6 +251,123 @@ private:
 			std::vector<uint8_t>::const_iterator);
 
 	const std::shared_ptr<const std::vector<Item>> ptr;
+};
+
+template<class S>
+class RecordT<S>::Item
+{
+public:
+	struct UnknownType
+	{
+		string type;
+		string value;
+	};
+
+	struct Empty {};
+
+	using Integer = int;
+	using Text = string;
+	using Binary = vector<uint8_t>;
+	using Date = ZonedTime;
+	using UUID = erebos::UUID;
+	using Ref = typename S::Ref;
+
+	using Variant = variant<
+		monostate,
+		Empty,
+		int,
+		string,
+		vector<uint8_t>,
+		ZonedTime,
+		UUID,
+		typename S::Ref,
+		UnknownType>;
+
+	Item(const string & name):
+		Item(name, monostate()) {}
+	Item(const string & name, Variant value):
+		name(name), value(value) {}
+	template<typename T>
+	Item(const string & name, const Stored<T> & value):
+		Item(name, value.ref()) {}
+
+	Item(const Item &) = default;
+	Item & operator=(const Item &) = delete;
+
+	operator bool() const;
+
+	optional<Empty> asEmpty() const;
+	optional<Integer> asInteger() const;
+	optional<Text> asText() const;
+	optional<Binary> asBinary() const;
+	optional<Date> asDate() const;
+	optional<UUID> asUUID() const;
+	optional<Ref> asRef() const;
+	optional<UnknownType> asUnknown() const;
+
+	template<typename T> optional<Stored<T>> as() const;
+
+	const string name;
+	const Variant value;
+};
+
+template<class S>
+class RecordT<S>::Items
+{
+public:
+	using Empty = typename Item::Empty;
+	using Integer = typename Item::Integer;
+	using Text = typename Item::Text;
+	using Binary = typename Item::Binary;
+	using Date = typename Item::Date;
+	using UUID = typename Item::UUID;
+	using Ref = typename Item::Ref;
+	using UnknownType = typename Item::UnknownType;
+
+	Items(shared_ptr<const vector<Item>> items);
+	Items(shared_ptr<const vector<Item>> items, string filter);
+
+	class Iterator
+	{
+		Iterator(const Items & source, size_t idx);
+		friend Items;
+	public:
+		using iterator_category = std::forward_iterator_tag;
+		using value_type = Item;
+		using difference_type = ssize_t;
+		using pointer = const Item *;
+		using reference = const Item &;
+
+		Iterator(const Iterator &) = default;
+		~Iterator() = default;
+		Iterator & operator=(const Iterator &) = default;
+		Iterator & operator++();
+		value_type operator*() const { return (*source.items)[idx]; }
+		bool operator==(const Iterator & other) const { return idx == other.idx; }
+		bool operator!=(const Iterator & other) const { return idx != other.idx; }
+
+	private:
+		const Items & source;
+		size_t idx;
+	};
+
+	Iterator begin() const;
+	Iterator end() const;
+
+	vector<Empty> asEmpty() const;
+	vector<Integer> asInteger() const;
+	vector<Text> asText() const;
+	vector<Binary> asBinary() const;
+	vector<Date> asDate() const;
+	vector<UUID> asUUID() const;
+	vector<Ref> asRef() const;
+	vector<UnknownType> asUnknown() const;
+
+	template<typename T> vector<Stored<T>> as() const;
+
+private:
+	const shared_ptr<const vector<Item>> items;
+	const optional<string> filter;
 };
 
 extern template class RecordT<Storage>;
@@ -365,6 +440,18 @@ std::optional<Stored<T>> RecordT<S>::Item::as() const
 	if (auto ref = asRef())
 		return Stored<T>::load(ref.value());
 	return std::nullopt;
+}
+
+template<class S>
+template<typename T>
+vector<Stored<T>> RecordT<S>::Items::as() const
+{
+	auto refs = asRef();
+	vector<Stored<T>> res;
+	res.reserve(refs.size());
+	for (const auto & ref : refs)
+		res.push_back(Stored<T>::load(ref));
+	return res;
 }
 
 class Generation
