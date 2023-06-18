@@ -173,6 +173,9 @@ Ref Signature::store(const Storage & st) const
 
 bool Signature::verify(const Ref & ref) const
 {
+	if (!key->key)
+		return false;
+
 	unique_ptr<EVP_MD_CTX, void(*)(EVP_MD_CTX*)>
 		mdctx(EVP_MD_CTX_create(), &EVP_MD_CTX_free);
 	if (!mdctx)
