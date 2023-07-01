@@ -289,6 +289,9 @@ void startServer(const vector<string> &)
 
 	config.service<DirectMessageService>()
 		.onUpdate([](const DirectMessageThread & thread, ssize_t, ssize_t) {
+			if (thread.at(0).from()->sameAs(server->identity()))
+				return;
+
 			ostringstream ss;
 
 			string name = "<unnamed>";
@@ -550,6 +553,36 @@ void dmSendContact(const vector<string> & args)
 			args.at(1));
 }
 
+template<class T>
+static void dmList(const T & peer)
+{
+	if (auto id = peer.identity())
+		for (const auto & msg : h->behavior().get().shared<DirectMessageThreads>().thread(*id)) {
+			string name = "<unnamed>";
+			if (const auto & from = msg.from())
+				if (const auto & opt = from->name())
+					name = *opt;
+
+			ostringstream ss;
+			ss << "dm-list-item"
+				<< " from " << name
+				<< " text " << msg.text()
+				;
+			printLine(ss.str());
+		}
+	printLine("dm-list-done");
+}
+
+void dmListPeer(const vector<string> & args)
+{
+	dmList(getPeer(args.at(0)).peer);
+}
+
+void dmListContact(const vector<string> & args)
+{
+	dmList(getContact(args.at(0)));
+}
+
 vector<Command> commands = {
 	{ "store", store },
 	{ "stored-generation", storedGeneration },
@@ -576,6 +609,8 @@ vector<Command> commands = {
 	{ "contact-set-name", contactSetName },
 	{ "dm-send-peer", dmSendPeer },
 	{ "dm-send-contact", dmSendContact },
+	{ "dm-list-peer", dmListPeer },
+	{ "dm-list-contact", dmListContact },
 };
 
 }

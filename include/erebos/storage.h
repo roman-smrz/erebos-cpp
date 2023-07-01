@@ -474,6 +474,7 @@ class Stored
 	friend class Storage;
 	friend class Head<T>;
 public:
+	Stored() = default;
 	Stored(const Stored &) = default;
 	Stored(Stored &&) = default;
 	Stored & operator=(const Stored &) = default;

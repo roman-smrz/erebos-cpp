@@ -37,16 +37,25 @@ struct DirectMessageThread::Priv
 {
 	const Identity peer;
 	const vector<Stored<DirectMessageData>> head;
-
-	static DirectMessageThread getThreadLocked(const Identity & peer);
-	static DirectMessageThread updateThreadLocked(const Identity & peer,
-			vector<Stored<DirectMessageData>> && head);
 };
 
 struct DirectMessageThread::Iterator::Priv
 {
 	optional<DirectMessage> current;
 	vector<Stored<DirectMessageData>> next;
+};
+
+struct DirectMessageState
+{
+	static DirectMessageState load(const Ref &);
+	Ref store(const Storage &) const;
+
+	vector<Stored<DirectMessageState>> prev;
+	optional<Identity> peer;
+
+	vector<Stored<DirectMessageData>> sent;
+	vector<Stored<DirectMessageData>> received;
+	vector<Stored<DirectMessageData>> seen;
 };
 
 }

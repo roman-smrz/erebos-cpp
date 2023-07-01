@@ -1,19 +1,23 @@
 #pragma once
 
+#include <erebos/merge.h>
 #include <erebos/service.h>
 
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 
 namespace erebos {
 
+using std::mutex;
 using std::unique_ptr;
 
 class Contact;
 class Identity;
+struct DirectMessageState;
 
 class DirectMessage
 {
@@ -67,9 +71,41 @@ public:
 
 private:
 	friend class DirectMessageService;
+	friend class DirectMessageThreads;
 	struct Priv;
 	DirectMessageThread(Priv *);
 	std::shared_ptr<Priv> p;
+};
+
+class DirectMessageThreads
+{
+public:
+	DirectMessageThreads();
+	DirectMessageThreads(Stored<DirectMessageState>);
+	DirectMessageThreads(vector<Stored<DirectMessageState>>);
+
+	static DirectMessageThreads load(const vector<Ref> & refs);
+	vector<Ref> store() const;
+	vector<Stored<DirectMessageState>> data() const;
+
+	bool operator==(const DirectMessageThreads &) const;
+	bool operator!=(const DirectMessageThreads &) const;
+
+	DirectMessageThread thread(const Identity &) const;
+
+private:
+	vector<Stored<DirectMessageState>> state;
+
+	friend class DirectMessageService;
+};
+
+DECLARE_SHARED_TYPE(DirectMessageThreads)
+
+template<> struct Mergeable<DirectMessageThreads>
+{
+	using Component = DirectMessageState;
+	static vector<Stored<DirectMessageState>> components(const DirectMessageThreads &);
+	static Contact merge(vector<Stored<DirectMessageState>>);
 };
 
 class DirectMessageService : public Service
@@ -100,8 +136,15 @@ public:
 	DirectMessage send(const Peer &, const std::string &);
 
 private:
+	void updateHandler(const DirectMessageThreads &);
+
 	const Config config;
 	const Server & server;
+
+	vector<Stored<DirectMessageState>> prevState;
+	mutex stateMutex;
+
+	Watched<DirectMessageThreads> watched;
 };
 
 }
