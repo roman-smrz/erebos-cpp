@@ -651,6 +651,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 				});
 				waiting.push_back(wref);
 				peer.serviceQueue.emplace_back(*serviceType, wref);
+				reply.header({ TransportHeader::Type::Acknowledged, pref });
 				wref->check(reply);
 			}
 		}
