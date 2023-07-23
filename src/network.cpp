@@ -642,18 +642,19 @@ void Server::Priv::handlePacket(Server::Peer & peer, const TransportHeader & hea
 			if (!serviceType)
 				break;
 
-			if (auto pref = std::get<PartialRef>(item.value)) {
-				shared_ptr<WaitingRef> wref(new WaitingRef {
-					.storage = peer.tempStorage,
+			auto pref = std::get<PartialRef>(item.value);
+			if (pref)
+				reply.header({ TransportHeader::Type::Acknowledged, pref });
+
+			shared_ptr<WaitingRef> wref(new WaitingRef {
+				.storage = peer.tempStorage,
 					.ref = pref,
 					.peer = peer,
 					.missing = {},
-				});
-				waiting.push_back(wref);
-				peer.serviceQueue.emplace_back(*serviceType, wref);
-				reply.header({ TransportHeader::Type::Acknowledged, pref });
-				wref->check(reply);
-			}
+			});
+			waiting.push_back(wref);
+			peer.serviceQueue.emplace_back(*serviceType, wref);
+			wref->check(reply);
 		}
 	}
 }
