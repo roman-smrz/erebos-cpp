@@ -6,8 +6,6 @@
 #include <set>
 #include <stdexcept>
 
-#include <iostream>
-
 using namespace erebos;
 
 using std::async;
@@ -354,8 +352,8 @@ optional<Stored<IdentityData>> Identity::Priv::lookupProperty(
 	}
 
 	for (auto x = prop_heads.begin(); x != prop_heads.end(); x++)
-		for (auto y = std::next(x); y != prop_heads.end();)
-			if (y->precedes(*x))
+		for (auto y = prop_heads.begin(); y != prop_heads.end();)
+			if (y != x && y->precedes(*x))
 				y = prop_heads.erase(y);
 			else
 				y++;
