@@ -3,6 +3,7 @@
 #include <erebos/network.h>
 
 #include "channel.h"
+#include "network/protocol.h"
 
 #include <condition_variable>
 #include <mutex>
@@ -181,7 +182,7 @@ struct Server::Priv
 	vector<struct TransportHeader> outgoing;
 	vector<weak_ptr<WaitingRef>> waiting;
 
-	int sock;
+	NetworkProtocol protocol;
 	vector<in_addr> localAddresses;
 	vector<in_addr> bcastAddresses;
 

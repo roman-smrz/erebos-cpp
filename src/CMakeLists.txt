@@ -11,6 +11,7 @@ add_library(erebos
 	merge.cpp
 	message.cpp
 	network.cpp
+	network/protocol.cpp
 	pairing.cpp
 	pubkey.cpp
 	service.cpp

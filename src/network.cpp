@@ -1,6 +1,7 @@
 #include "network.h"
 
 #include "identity.h"
+#include "network/protocol.h"
 #include "service.h"
 
 #include <algorithm>
@@ -313,9 +314,11 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self):
 		}
 	}
 
-	sock = socket(AF_INET6, SOCK_DGRAM, 0);
+	int sock = socket(AF_INET6, SOCK_DGRAM, 0);
 	if (sock < 0)
 		throw std::system_error(errno, std::generic_category());
+
+	protocol = NetworkProtocol(sock);
 
 	int disable = 0;
 	// Should be disabled by default, but try to make sure. On platforms
@@ -349,15 +352,11 @@ Server::Priv::~Priv()
 		finish = true;
 	}
 
-	if (sock >= 0)
-		shutdown(sock, SHUT_RDWR);
+	protocol.shutdown();
 
 	announceCondvar.notify_all();
 	threadListen.join();
 	threadAnnounce.join();
-
-	if (sock >= 0)
-		close(sock);
 }
 
 shared_ptr<Server::Priv> Server::Priv::getptr()
@@ -372,18 +371,11 @@ void Server::Priv::doListen()
 	unique_lock lock(dataMutex);
 
 	for (; !finish; lock.lock()) {
-		sockaddr_in6 paddr;
-
 		lock.unlock();
-		socklen_t addrlen = sizeof(paddr);
-		buf.resize(4096);
-		ssize_t ret = recvfrom(sock, buf.data(), buf.size(), 0,
-				(sockaddr *) &paddr, &addrlen);
-		if (ret < 0)
-			throw std::system_error(errno, std::generic_category());
-		if (ret == 0)
+
+		sockaddr_in6 paddr;
+		if (not protocol.recvfrom(buf, paddr))
 			break;
-		buf.resize(ret);
 
 		if (isSelfAddress(paddr))
 			continue;
@@ -456,7 +448,7 @@ void Server::Priv::doAnnounce()
 				sin.sin_family = AF_INET;
 				sin.sin_addr = in;
 				sin.sin_port = htons(discoveryPort);
-				sendto(sock, bytes.data(), bytes.size(), 0, (sockaddr *) &sin, sizeof(sin));
+				protocol.sendto(bytes, sin);
 			}
 
 			lastAnnounce += announceInterval * ((now - lastAnnounce) / announceInterval);
@@ -703,8 +695,7 @@ void Server::Peer::send(const TransportHeader & header, const vector<Object> & o
 		out = std::move(data);
 
 	if (!out.empty())
-		sendto(server.sock, out.data(), out.size(), 0,
-				(sockaddr *) &addr, sizeof(addr));
+		server.protocol.sendto(out, addr);
 }
 
 void Server::Peer::updateIdentity(ReplyBuilder &)
@@ -840,9 +831,7 @@ void Server::Peer::trySendOutQueue()
 
 	for (const auto & data : secureOutQueue) {
 		auto out = std::get<unique_ptr<Channel>>(channel)->encrypt(data);
-
-		sendto(server.sock, out.data(), out.size(), 0,
-				(sockaddr *) &addr, sizeof(addr));
+		server.protocol.sendto(out, addr);
 	}
 
 	secureOutQueue.clear();
