@@ -44,7 +44,7 @@ struct Server::Peer
 	Peer & operator=(const Peer &) = delete;
 
 	Priv & server;
-	const sockaddr_in6 addr;
+	NetworkProtocol::Connection connection;
 
 	variant<monostate,
 		shared_ptr<struct WaitingRef>,
@@ -157,7 +157,9 @@ struct Server::Priv
 	void doAnnounce();
 
 	bool isSelfAddress(const sockaddr_in6 & paddr);
+	Peer * findPeer(NetworkProtocol::Connection::Id cid) const;
 	Peer & getPeer(const sockaddr_in6 & paddr);
+	Peer & addPeer(NetworkProtocol::Connection conn);
 	void handlePacket(Peer &, const TransportHeader &, ReplyBuilder &);
 
 	void handleLocalHeadChange(const Head<LocalState> &);
@@ -165,7 +167,7 @@ struct Server::Priv
 	constexpr static uint16_t discoveryPort { 29665 };
 	constexpr static chrono::seconds announceInterval { 60 };
 
-	mutex dataMutex;
+	mutable mutex dataMutex;
 	condition_variable announceCondvar;
 	bool finish = false;
 
