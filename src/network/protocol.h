@@ -1,5 +1,7 @@
 #pragma once
 
+#include <erebos/storage.h>
+
 #include <netinet/in.h>
 
 #include <cstdint>
@@ -7,10 +9,12 @@
 #include <mutex>
 #include <variant>
 #include <vector>
+#include <optional>
 
 namespace erebos {
 
 using std::mutex;
+using std::optional;
 using std::unique_ptr;
 using std::variant;
 using std::vector;
@@ -27,6 +31,8 @@ public:
 	~NetworkProtocol();
 
 	class Connection;
+
+	struct Header;
 
 	struct NewConnection;
 	struct ConnectionReadReady;
@@ -84,5 +90,35 @@ private:
 
 struct NetworkProtocol::NewConnection { Connection conn; };
 struct NetworkProtocol::ConnectionReadReady { Connection::Id id; };
+
+struct NetworkProtocol::Header
+{
+	enum class Type {
+		Acknowledged,
+		DataRequest,
+		DataResponse,
+		AnnounceSelf,
+		AnnounceUpdate,
+		ChannelRequest,
+		ChannelAccept,
+		ServiceType,
+		ServiceRef,
+	};
+
+	struct Item {
+		const Type type;
+		const variant<PartialRef, UUID> value;
+
+		bool operator==(const Item &) const;
+		bool operator!=(const Item & other) const { return !(*this == other); }
+	};
+
+	Header(const vector<Item> & items): items(items) {}
+	static optional<Header> load(const PartialRef &);
+	static optional<Header> load(const PartialObject &);
+	PartialObject toObject() const;
+
+	const vector<Item> items;
+};
 
 }

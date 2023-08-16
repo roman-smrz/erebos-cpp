@@ -65,7 +65,7 @@ struct Server::Peer
 
 	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
 
-	void send(const struct TransportHeader &, const vector<Object> &, bool secure);
+	void send(const NetworkProtocol::Header &, const vector<Object> &, bool secure);
 	void updateIdentity(ReplyBuilder &);
 	void updateChannel(ReplyBuilder &);
 	void finalizeChannel(ReplyBuilder &, unique_ptr<Channel>);
@@ -91,47 +91,17 @@ struct PeerList::Priv : enable_shared_from_this<PeerList::Priv>
 	void push(const shared_ptr<Server::Peer> &);
 };
 
-struct TransportHeader
-{
-	enum class Type {
-		Acknowledged,
-		DataRequest,
-		DataResponse,
-		AnnounceSelf,
-		AnnounceUpdate,
-		ChannelRequest,
-		ChannelAccept,
-		ServiceType,
-		ServiceRef,
-	};
-
-	struct Item {
-		const Type type;
-		const variant<PartialRef, UUID> value;
-
-		bool operator==(const Item &) const;
-		bool operator!=(const Item & other) const { return !(*this == other); }
-	};
-
-	TransportHeader(const vector<Item> & items): items(items) {}
-	static optional<TransportHeader> load(const PartialRef &);
-	static optional<TransportHeader> load(const PartialObject &);
-	PartialObject toObject() const;
-
-	const vector<Item> items;
-};
-
 class ReplyBuilder
 {
 public:
-	void header(TransportHeader::Item &&);
+	void header(NetworkProtocol::Header::Item &&);
 	void body(const Ref &);
 
-	const vector<TransportHeader::Item> & header() const { return mheader; }
+	const vector<NetworkProtocol::Header::Item> & header() const { return mheader; }
 	vector<Object> body() const;
 
 private:
-	vector<TransportHeader::Item> mheader;
+	vector<NetworkProtocol::Header::Item> mheader;
 	vector<Ref> mbody;
 };
 
@@ -160,7 +130,7 @@ struct Server::Priv
 	Peer * findPeer(NetworkProtocol::Connection::Id cid) const;
 	Peer & getPeer(const sockaddr_in6 & paddr);
 	Peer & addPeer(NetworkProtocol::Connection conn);
-	void handlePacket(Peer &, const TransportHeader &, ReplyBuilder &);
+	void handlePacket(Peer &, const NetworkProtocol::Header &, ReplyBuilder &);
 
 	void handleLocalHeadChange(const Head<LocalState> &);
 
@@ -181,7 +151,7 @@ struct Server::Priv
 	vector<shared_ptr<Peer>> peers;
 	PeerList plist;
 
-	vector<struct TransportHeader> outgoing;
+	vector<struct NetworkProtocol::Header> outgoing;
 	vector<weak_ptr<WaitingRef>> waiting;
 
 	NetworkProtocol protocol;

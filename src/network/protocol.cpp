@@ -7,7 +7,10 @@
 #include <mutex>
 #include <system_error>
 
+using std::holds_alternative;
 using std::move;
+using std::nullopt;
+using std::runtime_error;
 using std::scoped_lock;
 
 namespace erebos {
@@ -122,6 +125,10 @@ void NetworkProtocol::shutdown()
 }
 
 
+/******************************************************************************/
+/* Connection                                                                 */
+/******************************************************************************/
+
 NetworkProtocol::Connection::Id NetworkProtocol::ConnectionPriv::id() const
 {
 	return reinterpret_cast<uintptr_t>(this);
@@ -193,6 +200,149 @@ void NetworkProtocol::Connection::close()
 	}
 
 	p = nullptr;
+}
+
+
+/******************************************************************************/
+/* Header                                                                     */
+/******************************************************************************/
+
+bool NetworkProtocol::Header::Item::operator==(const Item & other) const
+{
+	if (type != other.type)
+		return false;
+
+	if (value.index() != other.value.index())
+		return false;
+
+	if (holds_alternative<PartialRef>(value))
+		return std::get<PartialRef>(value).digest() ==
+			std::get<PartialRef>(other.value).digest();
+
+	if (holds_alternative<UUID>(value))
+		return std::get<UUID>(value) == std::get<UUID>(other.value);
+
+	throw runtime_error("unhandled network header item type");
+}
+
+optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialRef & ref)
+{
+	return load(*ref);
+}
+
+optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialObject & obj)
+{
+	auto rec = obj.asRecord();
+	if (!rec)
+		return nullopt;
+
+	vector<Item> items;
+	for (const auto & item : rec->items()) {
+		if (item.name == "ACK") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::Acknowledged,
+					.value = *ref,
+				});
+		} else if (item.name == "REQ") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::DataRequest,
+					.value = *ref,
+				});
+		} else if (item.name == "RSP") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::DataResponse,
+					.value = *ref,
+				});
+		} else if (item.name == "ANN") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::AnnounceSelf,
+					.value = *ref,
+				});
+		} else if (item.name == "ANU") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::AnnounceUpdate,
+					.value = *ref,
+				});
+		} else if (item.name == "CRQ") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::ChannelRequest,
+					.value = *ref,
+				});
+		} else if (item.name == "CAC") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::ChannelAccept,
+					.value = *ref,
+				});
+		} else if (item.name == "STP") {
+			if (auto val = item.asUUID())
+				items.emplace_back(Item {
+					.type = Type::ServiceType,
+					.value = *val,
+				});
+		} else if (item.name == "SRF") {
+			if (auto ref = item.asRef())
+				items.emplace_back(Item {
+					.type = Type::ServiceRef,
+					.value = *ref,
+				});
+		}
+	}
+
+	return NetworkProtocol::Header(items);
+}
+
+PartialObject NetworkProtocol::Header::toObject() const
+{
+	vector<PartialRecord::Item> ritems;
+
+	for (const auto & item : items) {
+		switch (item.type) {
+		case Type::Acknowledged:
+			ritems.emplace_back("ACK", std::get<PartialRef>(item.value));
+			break;
+
+		case Type::DataRequest:
+			ritems.emplace_back("REQ", std::get<PartialRef>(item.value));
+			break;
+
+		case Type::DataResponse:
+			ritems.emplace_back("RSP", std::get<PartialRef>(item.value));
+			break;
+
+		case Type::AnnounceSelf:
+			ritems.emplace_back("ANN", std::get<PartialRef>(item.value));
+			break;
+
+		case Type::AnnounceUpdate:
+			ritems.emplace_back("ANU", std::get<PartialRef>(item.value));
+			break;
+
+		case Type::ChannelRequest:
+			ritems.emplace_back("CRQ", std::get<PartialRef>(item.value));
+			break;
+
+		case Type::ChannelAccept:
+			ritems.emplace_back("CAC", std::get<PartialRef>(item.value));
+			break;
+
+		case Type::ServiceType:
+			ritems.emplace_back("STP", std::get<UUID>(item.value));
+			break;
+
+		case Type::ServiceRef:
+			ritems.emplace_back("SRF", std::get<PartialRef>(item.value));
+			break;
+		}
+	}
+
+	return PartialObject(PartialRecord(std::move(ritems)));
 }
 
 }
