@@ -215,9 +215,8 @@ bool NetworkProtocol::Header::Item::operator==(const Item & other) const
 	if (value.index() != other.value.index())
 		return false;
 
-	if (holds_alternative<PartialRef>(value))
-		return std::get<PartialRef>(value).digest() ==
-			std::get<PartialRef>(other.value).digest();
+	if (holds_alternative<Digest>(value))
+		return std::get<Digest>(value) == std::get<Digest>(other.value);
 
 	if (holds_alternative<UUID>(value))
 		return std::get<UUID>(value) == std::get<UUID>(other.value);
@@ -242,43 +241,43 @@ optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialObj
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::Acknowledged,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		} else if (item.name == "REQ") {
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::DataRequest,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		} else if (item.name == "RSP") {
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::DataResponse,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		} else if (item.name == "ANN") {
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::AnnounceSelf,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		} else if (item.name == "ANU") {
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::AnnounceUpdate,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		} else if (item.name == "CRQ") {
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::ChannelRequest,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		} else if (item.name == "CAC") {
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::ChannelAccept,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		} else if (item.name == "STP") {
 			if (auto val = item.asUUID())
@@ -290,7 +289,7 @@ optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialObj
 			if (auto ref = item.asRef())
 				items.emplace_back(Item {
 					.type = Type::ServiceRef,
-					.value = *ref,
+					.value = ref->digest(),
 				});
 		}
 	}
@@ -298,38 +297,38 @@ optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialObj
 	return NetworkProtocol::Header(items);
 }
 
-PartialObject NetworkProtocol::Header::toObject() const
+PartialObject NetworkProtocol::Header::toObject(const PartialStorage & st) const
 {
 	vector<PartialRecord::Item> ritems;
 
 	for (const auto & item : items) {
 		switch (item.type) {
 		case Type::Acknowledged:
-			ritems.emplace_back("ACK", std::get<PartialRef>(item.value));
+			ritems.emplace_back("ACK", st.ref(std::get<Digest>(item.value)));
 			break;
 
 		case Type::DataRequest:
-			ritems.emplace_back("REQ", std::get<PartialRef>(item.value));
+			ritems.emplace_back("REQ", st.ref(std::get<Digest>(item.value)));
 			break;
 
 		case Type::DataResponse:
-			ritems.emplace_back("RSP", std::get<PartialRef>(item.value));
+			ritems.emplace_back("RSP", st.ref(std::get<Digest>(item.value)));
 			break;
 
 		case Type::AnnounceSelf:
-			ritems.emplace_back("ANN", std::get<PartialRef>(item.value));
+			ritems.emplace_back("ANN", st.ref(std::get<Digest>(item.value)));
 			break;
 
 		case Type::AnnounceUpdate:
-			ritems.emplace_back("ANU", std::get<PartialRef>(item.value));
+			ritems.emplace_back("ANU", st.ref(std::get<Digest>(item.value)));
 			break;
 
 		case Type::ChannelRequest:
-			ritems.emplace_back("CRQ", std::get<PartialRef>(item.value));
+			ritems.emplace_back("CRQ", st.ref(std::get<Digest>(item.value)));
 			break;
 
 		case Type::ChannelAccept:
-			ritems.emplace_back("CAC", std::get<PartialRef>(item.value));
+			ritems.emplace_back("CAC", st.ref(std::get<Digest>(item.value)));
 			break;
 
 		case Type::ServiceType:
@@ -337,7 +336,7 @@ PartialObject NetworkProtocol::Header::toObject() const
 			break;
 
 		case Type::ServiceRef:
-			ritems.emplace_back("SRF", std::get<PartialRef>(item.value));
+			ritems.emplace_back("SRF", st.ref(std::get<Digest>(item.value)));
 			break;
 		}
 	}

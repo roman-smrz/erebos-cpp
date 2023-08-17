@@ -107,7 +107,7 @@ struct NetworkProtocol::Header
 
 	struct Item {
 		const Type type;
-		const variant<PartialRef, UUID> value;
+		const variant<Digest, UUID> value;
 
 		bool operator==(const Item &) const;
 		bool operator!=(const Item & other) const { return !(*this == other); }
@@ -116,7 +116,7 @@ struct NetworkProtocol::Header
 	Header(const vector<Item> & items): items(items) {}
 	static optional<Header> load(const PartialRef &);
 	static optional<Header> load(const PartialObject &);
-	PartialObject toObject() const;
+	PartialObject toObject(const PartialStorage &) const;
 
 	const vector<Item> items;
 };
