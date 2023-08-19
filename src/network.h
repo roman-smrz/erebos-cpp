@@ -54,16 +54,13 @@ struct Server::Peer
 	PartialStorage partStorage;
 
 	vector<tuple<UUID, shared_ptr<WaitingRef>>> serviceQueue {};
-	vector<vector<uint8_t>> secureOutQueue {};
 
 	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
 
-	void send(const NetworkProtocol::Header &, const vector<Object> &, bool secure);
 	void updateIdentity(ReplyBuilder &);
 	void updateChannel(ReplyBuilder &);
 	void finalizeChannel(ReplyBuilder &, unique_ptr<Channel>);
 	void updateService(ReplyBuilder &);
-	void trySendOutQueue();
 };
 
 struct Peer::Priv : enable_shared_from_this<Peer::Priv>

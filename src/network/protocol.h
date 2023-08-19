@@ -87,13 +87,15 @@ public:
 
 	const sockaddr_in6 & peerAddress() const;
 
-	bool receive(vector<uint8_t> & buffer);
-	bool send(const vector<uint8_t> & buffer);
+	optional<Header> receive(const PartialStorage &);
+	bool send(const PartialStorage &, const NetworkProtocol::Header &,
+			const vector<Object> &, bool secure);
 
 	void close();
 
 	// temporary:
 	ChannelState & channel();
+	void trySendOutQueue();
 
 private:
 	unique_ptr<ConnectionPriv> p;
