@@ -4,13 +4,13 @@ include_directories(
 
 add_library(erebos
 	attach.cpp
-	channel.cpp
 	contact.cpp
 	frp.cpp
 	identity.cpp
 	merge.cpp
 	message.cpp
 	network.cpp
+	network/channel.cpp
 	network/protocol.cpp
 	pairing.cpp
 	pubkey.cpp

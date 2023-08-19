@@ -99,7 +99,6 @@ public:
 	string addressStr() const;
 	uint16_t port() const;
 
-	bool hasChannel() const;
 	bool send(UUID, const Ref &) const;
 	bool send(UUID, const Object &) const;
 

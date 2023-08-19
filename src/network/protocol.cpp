@@ -24,6 +24,8 @@ struct NetworkProtocol::ConnectionPriv
 
 	mutex cmutex {};
 	vector<uint8_t> buffer {};
+
+	ChannelState channel = monostate();
 };
 
 
@@ -200,6 +202,11 @@ void NetworkProtocol::Connection::close()
 	}
 
 	p = nullptr;
+}
+
+NetworkProtocol::ChannelState & NetworkProtocol::Connection::channel()
+{
+	return p->channel;
 }
 
 

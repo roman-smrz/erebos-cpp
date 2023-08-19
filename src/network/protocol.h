@@ -1,5 +1,7 @@
 #pragma once
 
+#include "channel.h"
+
 #include <erebos/storage.h>
 
 #include <netinet/in.h>
@@ -45,6 +47,12 @@ public:
 
 	PollResult poll();
 
+	using ChannelState = variant<monostate,
+		Stored<ChannelRequest>,
+		shared_ptr<struct WaitingRef>,
+		Stored<ChannelAccept>,
+		unique_ptr<Channel>>;
+
 	Connection connect(sockaddr_in6 addr);
 
 	bool recvfrom(vector<uint8_t> & buffer, sockaddr_in6 & addr);
@@ -84,6 +92,9 @@ public:
 
 	void close();
 
+	// temporary:
+	ChannelState & channel();
+
 private:
 	unique_ptr<ConnectionPriv> p;
 };
@@ -119,6 +130,30 @@ struct NetworkProtocol::Header
 	PartialObject toObject(const PartialStorage &) const;
 
 	const vector<Item> items;
+};
+
+class ReplyBuilder
+{
+public:
+	void header(NetworkProtocol::Header::Item &&);
+	void body(const Ref &);
+
+	const vector<NetworkProtocol::Header::Item> & header() const { return mheader; }
+	vector<Object> body() const;
+
+private:
+	vector<NetworkProtocol::Header::Item> mheader;
+	vector<Ref> mbody;
+};
+
+struct WaitingRef
+{
+	const Storage storage;
+	const PartialRef ref;
+	vector<Digest> missing;
+
+	optional<Ref> check();
+	optional<Ref> check(ReplyBuilder &);
 };
 
 }

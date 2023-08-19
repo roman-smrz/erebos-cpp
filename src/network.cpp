@@ -207,13 +207,6 @@ void Peer::Priv::notifyWatchers()
 	}
 }
 
-bool Peer::hasChannel() const
-{
-	if (auto speer = p->speer.lock())
-		return holds_alternative<unique_ptr<Channel>>(speer->channel);
-	return false;
-}
-
 bool Peer::send(UUID uuid, const Ref & ref) const
 {
 	return send(uuid, ref, *ref);
@@ -396,13 +389,13 @@ void Server::Priv::doListen()
 			continue;
 
 		current = &buf;
-		if (holds_alternative<unique_ptr<Channel>>(peer->channel)) {
-			if (auto dec = std::get<unique_ptr<Channel>>(peer->channel)->decrypt(buf)) {
+		if (holds_alternative<unique_ptr<Channel>>(peer->connection.channel())) {
+			if (auto dec = std::get<unique_ptr<Channel>>(peer->connection.channel())->decrypt(buf)) {
 				decrypted = std::move(*dec);
 				current = &decrypted;
 			}
-		} else if (holds_alternative<Stored<ChannelAccept>>(peer->channel)) {
-			if (auto dec = std::get<Stored<ChannelAccept>>(peer->channel)->
+		} else if (holds_alternative<Stored<ChannelAccept>>(peer->connection.channel())) {
+			if (auto dec = std::get<Stored<ChannelAccept>>(peer->connection.channel())->
 					data->channel()->decrypt(buf)) {
 				decrypted = std::move(*dec);
 				current = &decrypted;
@@ -508,7 +501,6 @@ Server::Peer & Server::Priv::getPeer(const sockaddr_in6 & paddr)
 		.connection = protocol.connect(paddr),
 		.identity = monostate(),
 		.identityUpdates = {},
-		.channel = monostate(),
 		.tempStorage = st,
 		.partStorage = st.derivePartialStorage(),
 		});
@@ -527,7 +519,6 @@ Server::Peer & Server::Priv::addPeer(NetworkProtocol::Connection conn)
 		.connection = move(conn),
 		.identity = monostate(),
 		.identityUpdates = {},
-		.channel = monostate(),
 		.tempStorage = st,
 		.partStorage = st.derivePartialStorage(),
 		});
@@ -548,16 +539,16 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 		switch (item.type) {
 		case NetworkProtocol::Header::Type::Acknowledged: {
 			auto dgst = std::get<Digest>(item.value);
-			if (holds_alternative<Stored<ChannelAccept>>(peer.channel) &&
-					std::get<Stored<ChannelAccept>>(peer.channel).ref().digest() == dgst)
+			if (holds_alternative<Stored<ChannelAccept>>(peer.connection.channel()) &&
+					std::get<Stored<ChannelAccept>>(peer.connection.channel()).ref().digest() == dgst)
 				peer.finalizeChannel(reply,
-					std::get<Stored<ChannelAccept>>(peer.channel)->data->channel());
+					std::get<Stored<ChannelAccept>>(peer.connection.channel())->data->channel());
 			break;
 		}
 
 		case NetworkProtocol::Header::Type::DataRequest: {
 			auto dgst = std::get<Digest>(item.value);
-			if (holds_alternative<unique_ptr<Channel>>(peer.channel) ||
+			if (holds_alternative<unique_ptr<Channel>>(peer.connection.channel()) ||
 					plaintextRefs.find(dgst) != plaintextRefs.end()) {
 				if (auto ref = peer.tempStorage.ref(dgst)) {
 					reply.header({ NetworkProtocol::Header::Type::DataResponse, ref->digest() });
@@ -595,7 +586,6 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				shared_ptr<WaitingRef> wref(new WaitingRef {
 					.storage = peer.tempStorage,
 					.ref = peer.partStorage.ref(dgst),
-					.peer = peer,
 					.missing = {},
 				});
 				waiting.push_back(wref);
@@ -613,7 +603,6 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				shared_ptr<WaitingRef> wref(new WaitingRef {
 					.storage = peer.tempStorage,
 					.ref = peer.partStorage.ref(dgst),
-					.peer = peer,
 					.missing = {},
 				});
 				waiting.push_back(wref);
@@ -626,29 +615,28 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 			auto dgst = std::get<Digest>(item.value);
 			reply.header({ NetworkProtocol::Header::Type::Acknowledged, dgst });
 
-			if (holds_alternative<Stored<ChannelRequest>>(peer.channel) &&
-					std::get<Stored<ChannelRequest>>(peer.channel).ref().digest() < dgst)
+			if (holds_alternative<Stored<ChannelRequest>>(peer.connection.channel()) &&
+					std::get<Stored<ChannelRequest>>(peer.connection.channel()).ref().digest() < dgst)
 				break;
 
-			if (holds_alternative<Stored<ChannelAccept>>(peer.channel))
+			if (holds_alternative<Stored<ChannelAccept>>(peer.connection.channel()))
 				break;
 
 			shared_ptr<WaitingRef> wref(new WaitingRef {
 				.storage = peer.tempStorage,
 				.ref = peer.partStorage.ref(dgst),
-				.peer = peer,
 				.missing = {},
 			});
 			waiting.push_back(wref);
-			peer.channel = wref;
+			peer.connection.channel() = wref;
 			wref->check(reply);
 			break;
 		}
 
 		case NetworkProtocol::Header::Type::ChannelAccept: {
 			auto dgst = std::get<Digest>(item.value);
-			if (holds_alternative<Stored<ChannelAccept>>(peer.channel) &&
-					std::get<Stored<ChannelAccept>>(peer.channel).ref().digest() < dgst)
+			if (holds_alternative<Stored<ChannelAccept>>(peer.connection.channel()) &&
+					std::get<Stored<ChannelAccept>>(peer.connection.channel()).ref().digest() < dgst)
 				break;
 
 			auto cres = peer.tempStorage.copy(peer.partStorage.ref(dgst));
@@ -685,9 +673,8 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 
 			shared_ptr<WaitingRef> wref(new WaitingRef {
 				.storage = peer.tempStorage,
-					.ref = pref,
-					.peer = peer,
-					.missing = {},
+				.ref = pref,
+				.missing = {},
 			});
 			waiting.push_back(wref);
 			peer.serviceQueue.emplace_back(*serviceType, wref);
@@ -732,8 +719,8 @@ void Server::Peer::send(const NetworkProtocol::Header & header, const vector<Obj
 		data.insert(data.end(), part.begin(), part.end());
 	}
 
-	if (holds_alternative<unique_ptr<Channel>>(channel))
-		out = std::get<unique_ptr<Channel>>(channel)->encrypt(data);
+	if (holds_alternative<unique_ptr<Channel>>(connection.channel()))
+		out = std::get<unique_ptr<Channel>>(connection.channel())->encrypt(data);
 	else if (secure)
 		secureOutQueue.emplace_back(move(data));
 	else
@@ -784,10 +771,10 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 	if (!holds_alternative<Identity>(identity))
 		return;
 
-	if (holds_alternative<monostate>(channel)) {
+	if (holds_alternative<monostate>(connection.channel())) {
 		auto req = Channel::generateRequest(tempStorage,
 				server.self, std::get<Identity>(identity));
-		channel.emplace<Stored<ChannelRequest>>(req);
+		connection.channel().emplace<Stored<ChannelRequest>>(req);
 		reply.header({ NetworkProtocol::Header::Type::ChannelRequest, req.ref().digest() });
 		reply.body(req.ref());
 		reply.body(req->data.ref());
@@ -796,13 +783,13 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 			reply.body(sig.ref());
 	}
 
-	if (holds_alternative<shared_ptr<WaitingRef>>(channel)) {
-		if (auto ref = std::get<shared_ptr<WaitingRef>>(channel)->check(reply)) {
+	if (holds_alternative<shared_ptr<WaitingRef>>(connection.channel())) {
+		if (auto ref = std::get<shared_ptr<WaitingRef>>(connection.channel())->check(reply)) {
 			auto req = Stored<ChannelRequest>::load(*ref);
 			if (holds_alternative<Identity>(identity) &&
 					req->isSignedBy(std::get<Identity>(identity).keyMessage())) {
 				if (auto acc = Channel::acceptRequest(server.self, std::get<Identity>(identity), req)) {
-					channel.emplace<Stored<ChannelAccept>>(*acc);
+					connection.channel().emplace<Stored<ChannelAccept>>(*acc);
 					reply.header({ NetworkProtocol::Header::Type::ChannelAccept, acc->ref().digest() });
 					reply.body(acc->ref());
 					reply.body(acc.value()->data.ref());
@@ -810,10 +797,10 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 					for (const auto & sig : acc.value()->sigs)
 						reply.body(sig.ref());
 				} else {
-					channel = monostate();
+					connection.channel() = monostate();
 				}
 			} else {
-				channel = monostate();
+				connection.channel() = monostate();
 			}
 		}
 	}
@@ -821,7 +808,7 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 
 void Server::Peer::finalizeChannel(ReplyBuilder & reply, unique_ptr<Channel> ch)
 {
-	channel.emplace<unique_ptr<Channel>>(move(ch));
+	connection.channel().emplace<unique_ptr<Channel>>(move(ch));
 
 	vector<NetworkProtocol::Header::Item> hitems;
 	for (const auto & r : server.self.refs())
@@ -871,11 +858,11 @@ void Server::Peer::trySendOutQueue()
 	if (secureOutQueue.empty())
 		return;
 
-	if (!holds_alternative<unique_ptr<Channel>>(channel))
+	if (!holds_alternative<unique_ptr<Channel>>(connection.channel()))
 		return;
 
 	for (const auto & data : secureOutQueue) {
-		auto out = std::get<unique_ptr<Channel>>(channel)->encrypt(data);
+		auto out = std::get<unique_ptr<Channel>>(connection.channel())->encrypt(data);
 		connection.send(out);
 	}
 

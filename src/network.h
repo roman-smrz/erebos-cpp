@@ -2,7 +2,6 @@
 
 #include <erebos/network.h>
 
-#include "channel.h"
 #include "network/protocol.h"
 
 #include <condition_variable>
@@ -51,12 +50,6 @@ struct Server::Peer
 		Identity> identity;
 	vector<shared_ptr<WaitingRef>> identityUpdates;
 
-	variant<monostate,
-		Stored<ChannelRequest>,
-		shared_ptr<struct WaitingRef>,
-		Stored<ChannelAccept>,
-		unique_ptr<Channel>> channel;
-
 	Storage tempStorage;
 	PartialStorage partStorage;
 
@@ -89,31 +82,6 @@ struct PeerList::Priv : enable_shared_from_this<PeerList::Priv>
 	vector<function<void(size_t, const Peer *)>> watchers;
 
 	void push(const shared_ptr<Server::Peer> &);
-};
-
-class ReplyBuilder
-{
-public:
-	void header(NetworkProtocol::Header::Item &&);
-	void body(const Ref &);
-
-	const vector<NetworkProtocol::Header::Item> & header() const { return mheader; }
-	vector<Object> body() const;
-
-private:
-	vector<NetworkProtocol::Header::Item> mheader;
-	vector<Ref> mbody;
-};
-
-struct WaitingRef
-{
-	const Storage storage;
-	const PartialRef ref;
-	const Server::Peer & peer;
-	vector<Digest> missing;
-
-	optional<Ref> check();
-	optional<Ref> check(ReplyBuilder &);
 };
 
 struct Server::Priv

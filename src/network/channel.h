@@ -2,7 +2,7 @@
 
 #include <erebos/storage.h>
 
-#include "identity.h"
+#include "../identity.h"
 
 #include <atomic>
 #include <memory>
