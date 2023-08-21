@@ -58,8 +58,12 @@ public:
 	static optional<Stored<ChannelAccept>> acceptRequest(const Identity & self,
 			const Identity & peer, const Stored<ChannelRequest> & request);
 
-	vector<uint8_t> encrypt(const vector<uint8_t> &);
-	optional<vector<uint8_t>> decrypt(const vector<uint8_t> &);
+	using Buffer = vector<uint8_t>;
+	using BufferCIt = Buffer::const_iterator;
+	uint64_t encrypt(BufferCIt plainBegin, BufferCIt plainEnd,
+			Buffer & encBuffer, size_t encOffset);
+	optional<uint64_t> decrypt(BufferCIt encBegin, BufferCIt encEnd,
+			Buffer & decBuffer, size_t decOffset);
 
 private:
 	const vector<Stored<Signed<IdentityData>>> peers;

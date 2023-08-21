@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -173,7 +174,8 @@ const sockaddr_in6 & NetworkProtocol::Connection::peerAddress() const
 optional<NetworkProtocol::Header> NetworkProtocol::Connection::receive(const PartialStorage & partStorage)
 {
 	vector<uint8_t> buf, decrypted;
-	vector<uint8_t> * current;
+	auto plainBegin = buf.cbegin();
+	auto plainEnd = buf.cbegin();
 
 	{
 		scoped_lock lock(p->cmutex);
@@ -182,28 +184,47 @@ optional<NetworkProtocol::Header> NetworkProtocol::Connection::receive(const Par
 			return nullopt;
 
 		buf.swap(p->buffer);
-		current = &buf;
 
-		if (holds_alternative<unique_ptr<Channel>>(p->channel)) {
-			if (auto dec = std::get<unique_ptr<Channel>>(p->channel)->decrypt(buf)) {
-				decrypted = std::move(*dec);
-				current = &decrypted;
+		if ((buf[0] & 0xE0) == 0x80) {
+			Channel * channel = nullptr;
+			unique_ptr<Channel> channelPtr;
+
+			if (holds_alternative<unique_ptr<Channel>>(p->channel)) {
+				channel = std::get<unique_ptr<Channel>>(p->channel).get();
+			} else if (holds_alternative<Stored<ChannelAccept>>(p->channel)) {
+				channelPtr = std::get<Stored<ChannelAccept>>(p->channel)->data->channel();
+				channel = channelPtr.get();
 			}
-		} else if (holds_alternative<Stored<ChannelAccept>>(p->channel)) {
-			if (auto dec = std::get<Stored<ChannelAccept>>(p->channel)->
-					data->channel()->decrypt(buf)) {
-				decrypted = std::move(*dec);
-				current = &decrypted;
+
+			if (not channel) {
+				std::cerr << "unexpected encrypted packet\n";
+				return nullopt;
 			}
+
+			if (auto dec = channel->decrypt(buf.begin() + 1, buf.end(), decrypted, 0)) {
+				if (decrypted.empty()) {
+					std::cerr << "empty decrypted content\n";
+				}
+				else if (decrypted[0] == 0x00) {
+					plainBegin = decrypted.begin() + 1;
+					plainEnd = decrypted.end();
+				}
+				else {
+					std::cerr << "streams not implemented\n";
+					return nullopt;
+				}
+			}
+		}
+		else if ((buf[0] & 0xE0) == 0x60) {
+			plainBegin = buf.begin();
+			plainEnd = buf.end();
 		}
 	}
 
-	if (auto dec = PartialObject::decodePrefix(partStorage,
-			current->begin(), current->end())) {
+	if (auto dec = PartialObject::decodePrefix(partStorage, plainBegin, plainEnd)) {
 		if (auto header = Header::load(std::get<PartialObject>(*dec))) {
 			auto pos = std::get<1>(*dec);
-			while (auto cdec = PartialObject::decodePrefix(partStorage,
-						pos, current->end())) {
+			while (auto cdec = PartialObject::decodePrefix(partStorage, pos, plainEnd)) {
 				partStorage.storeObject(std::get<PartialObject>(*cdec));
 				pos = std::get<1>(*cdec);
 			}
@@ -225,6 +246,13 @@ bool NetworkProtocol::Connection::send(const PartialStorage & partStorage,
 	{
 		scoped_lock clock(p->cmutex);
 
+		Channel * channel = nullptr;
+		if (holds_alternative<unique_ptr<Channel>>(p->channel))
+			channel = std::get<unique_ptr<Channel>>(p->channel).get();
+
+		if (channel || secure)
+			data.push_back(0x00);
+
 		part = header.toObject(partStorage).encode();
 		data.insert(data.end(), part.begin(), part.end());
 		for (const auto & obj : objs) {
@@ -232,12 +260,14 @@ bool NetworkProtocol::Connection::send(const PartialStorage & partStorage,
 			data.insert(data.end(), part.begin(), part.end());
 		}
 
-		if (holds_alternative<unique_ptr<Channel>>(p->channel))
-			out = std::get<unique_ptr<Channel>>(p->channel)->encrypt(data);
-		else if (secure)
+		if (channel) {
+			out.push_back(0x80);
+			channel->encrypt(data.begin(), data.end(), out, 1);
+		} else if (secure) {
 			p->secureOutQueue.emplace_back(move(data));
-		else
+		} else {
 			out = std::move(data);
+		}
 	}
 
 	if (not out.empty())
@@ -285,8 +315,9 @@ void NetworkProtocol::Connection::trySendOutQueue()
 		queue.swap(p->secureOutQueue);
 	}
 
+	vector<uint8_t> out { 0x80 };
 	for (const auto & data : queue) {
-		auto out = std::get<unique_ptr<Channel>>(p->channel)->encrypt(data);
+		std::get<unique_ptr<Channel>>(p->channel)->encrypt(data.begin(), data.end(), out, 1);
 		p->protocol->sendto(out, p->peerAddress);
 	}
 }

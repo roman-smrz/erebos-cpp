@@ -133,15 +133,17 @@ optional<Stored<ChannelAccept>> Channel::acceptRequest(const Identity & self,
 	}));
 }
 
-vector<uint8_t> Channel::encrypt(const vector<uint8_t> & plain)
+uint64_t Channel::encrypt(BufferCIt plainBegin, BufferCIt plainEnd,
+		Buffer & encBuffer, size_t encOffset)
 {
-	vector<uint8_t> res(plain.size() + 8 + 16 + 16);
+	auto plainSize = plainEnd - plainBegin;
+	encBuffer.resize(encOffset + plainSize + 8 + 16 + 16);
 	array<uint8_t, 12> iv;
 
 	uint64_t beCount = htobe64(nonceCounter++);
-	std::memcpy(res.data(), &beCount, 8);
+	std::memcpy(encBuffer.data() + encOffset, &beCount, 8);
 	std::copy_n(nonceFixedOur.begin(), 6, iv.begin());
-	std::copy_n(res.begin() + 2, 6, iv.begin() + 6);
+	std::copy_n(encBuffer.begin() + encOffset + 2, 6, iv.begin() + 6);
 
 	const unique_ptr<EVP_CIPHER_CTX, void(*)(EVP_CIPHER_CTX*)>
 		ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
@@ -149,9 +151,9 @@ vector<uint8_t> Channel::encrypt(const vector<uint8_t> & plain)
 			nullptr, key.data(), iv.data());
 
 	int outl = 0;
-	uint8_t * cur = res.data() + 8;
+	uint8_t * cur = encBuffer.data() + encOffset + 8;
 
-	if (EVP_EncryptUpdate(ctx.get(), cur, &outl, plain.data(), plain.size()) != 1)
+	if (EVP_EncryptUpdate(ctx.get(), cur, &outl, &*plainBegin, plainSize) != 1)
 		throw runtime_error("failed to encrypt data");
 	cur += outl;
 
@@ -162,17 +164,19 @@ vector<uint8_t> Channel::encrypt(const vector<uint8_t> & plain)
 	EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, 16, cur);
 	cur += 16;
 
-	res.resize(cur - res.data());
-	return res;
+	encBuffer.resize(cur - encBuffer.data());
+	return 0;
 }
 
-optional<vector<uint8_t>> Channel::decrypt(const vector<uint8_t> & ctext)
+optional<uint64_t> Channel::decrypt(BufferCIt encBegin, BufferCIt encEnd,
+			Buffer & decBuffer, const size_t decOffset)
 {
-	vector<uint8_t> res(ctext.size());
+	auto encSize = encEnd - encBegin;
+	decBuffer.resize(decOffset + encSize);
 	array<uint8_t, 12> iv;
 
 	std::copy_n(nonceFixedPeer.begin(), 6, iv.begin());
-	std::copy_n(ctext.begin() + 2, 6, iv.begin() + 6);
+	std::copy_n(encBegin + 2, 6, iv.begin() + 6);
 
 	const unique_ptr<EVP_CIPHER_CTX, void(*)(EVP_CIPHER_CTX*)>
 		ctx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free);
@@ -180,21 +184,21 @@ optional<vector<uint8_t>> Channel::decrypt(const vector<uint8_t> & ctext)
 			nullptr, key.data(), iv.data());
 
 	int outl = 0;
-	uint8_t * cur = res.data();
+	uint8_t * cur = decBuffer.data() + decOffset;
 
 	if (EVP_DecryptUpdate(ctx.get(), cur, &outl,
-				ctext.data() + 8, ctext.size() - 8 - 16) != 1)
+				&*encBegin + 8, encSize - 8 - 16) != 1)
 		return nullopt;
 	cur += outl;
 
 	if (!EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, 16,
-				(void *) (ctext.data() + ctext.size() - 16)))
+				(void *) (&*encEnd - 16)))
 		return nullopt;
 
 	if (EVP_DecryptFinal_ex(ctx.get(), cur, &outl) != 1)
 		return nullopt;
 	cur += outl;
 
-	res.resize(cur - res.data());
-	return res;
+	decBuffer.resize(cur - decBuffer.data());
+	return 0;
 }
