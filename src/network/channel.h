@@ -44,8 +44,8 @@ public:
 			vector<uint8_t> && key, bool ourRequest):
 		peers(peers),
 		key(std::move(key)),
-		nonceFixedOur({ uint8_t(ourRequest ? 1 : 2), 0, 0, 0, 0, 0 }),
-		nonceFixedPeer({ uint8_t(ourRequest ? 2 : 1), 0, 0, 0, 0, 0 })
+		nonceFixedOur({ uint8_t(ourRequest ? 1 : 2), 0, 0, 0 }),
+		nonceFixedPeer({ uint8_t(ourRequest ? 2 : 1), 0, 0, 0 })
 	{}
 
 	Channel(const Channel &) = delete;
@@ -69,9 +69,10 @@ private:
 	const vector<Stored<Signed<IdentityData>>> peers;
 	const vector<uint8_t> key;
 
-	const array<uint8_t, 6> nonceFixedOur;
-	const array<uint8_t, 6> nonceFixedPeer;
-	atomic<uint64_t> nonceCounter = 0;
+	const array<uint8_t, 4> nonceFixedOur;
+	const array<uint8_t, 4> nonceFixedPeer;
+	atomic<uint64_t> counterNextOut = 0;
+	atomic<uint64_t> counterNextIn = 0;
 };
 
 }
