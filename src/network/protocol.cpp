@@ -9,11 +9,12 @@
 #include <mutex>
 #include <system_error>
 
+using std::get_if;
 using std::holds_alternative;
 using std::move;
 using std::nullopt;
-using std::runtime_error;
 using std::scoped_lock;
+using std::visit;
 
 namespace erebos {
 
@@ -327,21 +328,16 @@ void NetworkProtocol::Connection::trySendOutQueue()
 /* Header                                                                     */
 /******************************************************************************/
 
-bool NetworkProtocol::Header::Item::operator==(const Item & other) const
+bool operator==(const NetworkProtocol::Header::Item & left,
+		const NetworkProtocol::Header::Item & right)
 {
-	if (type != other.type)
+	if (left.index() != right.index())
 		return false;
 
-	if (value.index() != other.value.index())
-		return false;
-
-	if (holds_alternative<Digest>(value))
-		return std::get<Digest>(value) == std::get<Digest>(other.value);
-
-	if (holds_alternative<UUID>(value))
-		return std::get<UUID>(value) == std::get<UUID>(other.value);
-
-	throw runtime_error("unhandled network header item type");
+	return visit([&](auto && arg) {
+            using T = std::decay_t<decltype(arg)>;
+	    return arg.value == std::get<T>(right).value;
+	}, left);
 }
 
 optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialRef & ref)
@@ -359,58 +355,31 @@ optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialObj
 	for (const auto & item : rec->items()) {
 		if (item.name == "ACK") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::Acknowledged,
-					.value = ref->digest(),
-				});
+				items.emplace_back(Acknowledged { ref->digest() });
 		} else if (item.name == "REQ") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::DataRequest,
-					.value = ref->digest(),
-				});
+				items.emplace_back(DataRequest { ref->digest() });
 		} else if (item.name == "RSP") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::DataResponse,
-					.value = ref->digest(),
-				});
+				items.emplace_back(DataResponse { ref->digest() });
 		} else if (item.name == "ANN") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::AnnounceSelf,
-					.value = ref->digest(),
-				});
+				items.emplace_back(AnnounceSelf { ref->digest() });
 		} else if (item.name == "ANU") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::AnnounceUpdate,
-					.value = ref->digest(),
-				});
+				items.emplace_back(AnnounceUpdate { ref->digest() });
 		} else if (item.name == "CRQ") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::ChannelRequest,
-					.value = ref->digest(),
-				});
+				items.emplace_back(ChannelRequest { ref->digest() });
 		} else if (item.name == "CAC") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::ChannelAccept,
-					.value = ref->digest(),
-				});
+				items.emplace_back(ChannelAccept { ref->digest() });
 		} else if (item.name == "STP") {
 			if (auto val = item.asUUID())
-				items.emplace_back(Item {
-					.type = Type::ServiceType,
-					.value = *val,
-				});
+				items.emplace_back(ServiceType { *val });
 		} else if (item.name == "SRF") {
 			if (auto ref = item.asRef())
-				items.emplace_back(Item {
-					.type = Type::ServiceRef,
-					.value = ref->digest(),
-				});
+				items.emplace_back(ServiceRef { ref->digest() });
 		}
 	}
 
@@ -422,43 +391,32 @@ PartialObject NetworkProtocol::Header::toObject(const PartialStorage & st) const
 	vector<PartialRecord::Item> ritems;
 
 	for (const auto & item : items) {
-		switch (item.type) {
-		case Type::Acknowledged:
-			ritems.emplace_back("ACK", st.ref(std::get<Digest>(item.value)));
-			break;
+		if (const auto * ptr = get_if<Acknowledged>(&item))
+			ritems.emplace_back("ACK", st.ref(ptr->value));
 
-		case Type::DataRequest:
-			ritems.emplace_back("REQ", st.ref(std::get<Digest>(item.value)));
-			break;
+		else if (const auto * ptr = get_if<DataRequest>(&item))
+			ritems.emplace_back("REQ", st.ref(ptr->value));
 
-		case Type::DataResponse:
-			ritems.emplace_back("RSP", st.ref(std::get<Digest>(item.value)));
-			break;
+		else if (const auto * ptr = get_if<DataResponse>(&item))
+			ritems.emplace_back("RSP", st.ref(ptr->value));
 
-		case Type::AnnounceSelf:
-			ritems.emplace_back("ANN", st.ref(std::get<Digest>(item.value)));
-			break;
+		else if (const auto * ptr = get_if<AnnounceSelf>(&item))
+			ritems.emplace_back("ANN", st.ref(ptr->value));
 
-		case Type::AnnounceUpdate:
-			ritems.emplace_back("ANU", st.ref(std::get<Digest>(item.value)));
-			break;
+		else if (const auto * ptr = get_if<AnnounceUpdate>(&item))
+			ritems.emplace_back("ANU", st.ref(ptr->value));
 
-		case Type::ChannelRequest:
-			ritems.emplace_back("CRQ", st.ref(std::get<Digest>(item.value)));
-			break;
+		else if (const auto * ptr = get_if<ChannelRequest>(&item))
+			ritems.emplace_back("CRQ", st.ref(ptr->value));
 
-		case Type::ChannelAccept:
-			ritems.emplace_back("CAC", st.ref(std::get<Digest>(item.value)));
-			break;
+		else if (const auto * ptr = get_if<ChannelAccept>(&item))
+			ritems.emplace_back("CAC", st.ref(ptr->value));
 
-		case Type::ServiceType:
-			ritems.emplace_back("STP", std::get<UUID>(item.value));
-			break;
+		else if (const auto * ptr = get_if<ServiceType>(&item))
+			ritems.emplace_back("STP", ptr->value);
 
-		case Type::ServiceRef:
-			ritems.emplace_back("SRF", st.ref(std::get<Digest>(item.value)));
-			break;
-		}
+		else if (const auto * ptr = get_if<ServiceRef>(&item))
+			ritems.emplace_back("SRF", st.ref(ptr->value));
 	}
 
 	return PartialObject(PartialRecord(std::move(ritems)));

@@ -106,7 +106,17 @@ struct NetworkProtocol::ConnectionReadReady { Connection::Id id; };
 
 struct NetworkProtocol::Header
 {
-	enum class Type {
+	struct Acknowledged { Digest value; };
+	struct DataRequest { Digest value; };
+	struct DataResponse { Digest value; };
+	struct AnnounceSelf { Digest value; };
+	struct AnnounceUpdate { Digest value; };
+	struct ChannelRequest { Digest value; };
+	struct ChannelAccept { Digest value; };
+	struct ServiceType { UUID value; };
+	struct ServiceRef { Digest value; };
+
+	using Item = variant<
 		Acknowledged,
 		DataRequest,
 		DataResponse,
@@ -115,16 +125,7 @@ struct NetworkProtocol::Header
 		ChannelRequest,
 		ChannelAccept,
 		ServiceType,
-		ServiceRef,
-	};
-
-	struct Item {
-		const Type type;
-		const variant<Digest, UUID> value;
-
-		bool operator==(const Item &) const;
-		bool operator!=(const Item & other) const { return !(*this == other); }
-	};
+		ServiceRef>;
 
 	Header(const vector<Item> & items): items(items) {}
 	static optional<Header> load(const PartialRef &);
@@ -133,6 +134,11 @@ struct NetworkProtocol::Header
 
 	const vector<Item> items;
 };
+
+bool operator==(const NetworkProtocol::Header::Item &, const NetworkProtocol::Header::Item &);
+inline bool operator!=(const NetworkProtocol::Header::Item & left,
+		const NetworkProtocol::Header::Item & right)
+{ return not (left == right); }
 
 class ReplyBuilder
 {
