@@ -108,6 +108,7 @@ NetworkProtocol::Connection NetworkProtocol::connect(sockaddr_in6 addr)
 
 		vector<Header::Item> header {
 			Header::AnnounceSelf { self->ref()->digest() },
+			Header::Version { defaultVersion },
 		};
 		conn->send(self->ref()->storage(), header, {}, false);
 	}
@@ -143,6 +144,7 @@ void NetworkProtocol::announceTo(variant<sockaddr_in, sockaddr_in6> addr)
 
 		bytes = Header({
 			Header::AnnounceSelf { self->ref()->digest() },
+			Header::Version { defaultVersion },
 		}).toObject(self->ref()->storage()).encode();
 	}
 
@@ -409,6 +411,9 @@ optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialObj
 		if (item.name == "ACK") {
 			if (auto ref = item.asRef())
 				items.emplace_back(Acknowledged { ref->digest() });
+		} else if (item.name == "VER") {
+			if (auto ver = item.asText())
+				items.emplace_back(Version { *ver });
 		} else if (item.name == "REQ") {
 			if (auto ref = item.asRef())
 				items.emplace_back(DataRequest { ref->digest() });
@@ -446,6 +451,9 @@ PartialObject NetworkProtocol::Header::toObject(const PartialStorage & st) const
 	for (const auto & item : items) {
 		if (const auto * ptr = get_if<Acknowledged>(&item))
 			ritems.emplace_back("ACK", st.ref(ptr->value));
+
+		else if (const auto * ptr = get_if<Version>(&item))
+			ritems.emplace_back("VER", ptr->value);
 
 		else if (const auto * ptr = get_if<DataRequest>(&item))
 			ritems.emplace_back("REQ", st.ref(ptr->value));

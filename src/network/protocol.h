@@ -32,6 +32,8 @@ public:
 	NetworkProtocol & operator=(NetworkProtocol &&);
 	~NetworkProtocol();
 
+	static constexpr char defaultVersion[] = "0.1";
+
 	class Connection;
 
 	struct Header;
@@ -111,6 +113,7 @@ struct NetworkProtocol::ConnectionReadReady { Connection::Id id; };
 struct NetworkProtocol::Header
 {
 	struct Acknowledged { Digest value; };
+	struct Version { string value; };
 	struct DataRequest { Digest value; };
 	struct DataResponse { Digest value; };
 	struct AnnounceSelf { Digest value; };
@@ -122,6 +125,7 @@ struct NetworkProtocol::Header
 
 	using Item = variant<
 		Acknowledged,
+		Version,
 		DataRequest,
 		DataResponse,
 		AnnounceSelf,
