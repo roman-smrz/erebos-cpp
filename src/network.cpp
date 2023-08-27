@@ -221,7 +221,7 @@ bool Peer::send(UUID uuid, const Ref & ref, const Object & obj) const
 			NetworkProtocol::Header::ServiceType { uuid },
 			NetworkProtocol::Header::ServiceRef { ref.digest() },
 		});
-		speer->connection.send(speer->partStorage, header, { obj }, true);
+		speer->connection.send(speer->partStorage, move(header), { obj }, true);
 		return true;
 	}
 
@@ -362,6 +362,11 @@ void Server::Priv::doListen()
 
 		if (holds_alternative<NetworkProtocol::ProtocolClosed>(res))
 			break;
+
+		if (const auto * ann = get_if<NetworkProtocol::ReceivedAnnounce>(&res)) {
+			if (not isSelfAddress(ann->addr))
+				getPeer(ann->addr);
+		}
 
 		if (holds_alternative<NetworkProtocol::NewConnection>(res)) {
 			auto & conn = get<NetworkProtocol::NewConnection>(res).conn;
@@ -693,7 +698,8 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 	if (!holds_alternative<Identity>(identity))
 		return;
 
-	if (holds_alternative<monostate>(connection.channel())) {
+	if (holds_alternative<monostate>(connection.channel()) ||
+			holds_alternative<NetworkProtocol::Cookie>(connection.channel())) {
 		auto req = Channel::generateRequest(tempStorage,
 				server.self, std::get<Identity>(identity));
 		connection.channel().emplace<Stored<ChannelRequest>>(req);

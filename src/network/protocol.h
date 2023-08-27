@@ -38,18 +38,23 @@ public:
 
 	struct Header;
 
+	struct ReceivedAnnounce;
 	struct NewConnection;
 	struct ConnectionReadReady;
 	struct ProtocolClosed {};
 
 	using PollResult = variant<
+		ReceivedAnnounce,
 		NewConnection,
 		ConnectionReadReady,
 		ProtocolClosed>;
 
 	PollResult poll();
 
+	struct Cookie { vector<uint8_t> value; };
+
 	using ChannelState = variant<monostate,
+		Cookie,
 		Stored<ChannelRequest>,
 		shared_ptr<struct WaitingRef>,
 		Stored<ChannelAccept>,
@@ -65,6 +70,12 @@ public:
 private:
 	bool recvfrom(vector<uint8_t> & buffer, sockaddr_in6 & addr);
 	void sendto(const vector<uint8_t> & buffer, variant<sockaddr_in, sockaddr_in6> addr);
+
+	void sendCookie(variant<sockaddr_in, sockaddr_in6> addr);
+	optional<Connection> verifyNewConnection(const Header & header, sockaddr_in6 addr);
+
+	Cookie generateCookie(variant<sockaddr_in, sockaddr_in6> addr) const;
+	bool verifyCookie(variant<sockaddr_in, sockaddr_in6> addr, const Cookie & cookie) const;
 
 	int sock;
 
@@ -94,7 +105,7 @@ public:
 	const sockaddr_in6 & peerAddress() const;
 
 	optional<Header> receive(const PartialStorage &);
-	bool send(const PartialStorage &, const NetworkProtocol::Header &,
+	bool send(const PartialStorage &, NetworkProtocol::Header,
 			const vector<Object> &, bool secure);
 
 	void close();
@@ -104,9 +115,14 @@ public:
 	void trySendOutQueue();
 
 private:
+	static optional<Header> receive(vector<uint8_t> & buf,
+			Channel * channel,
+			const PartialStorage & st);
+
 	unique_ptr<ConnectionPriv> p;
 };
 
+struct NetworkProtocol::ReceivedAnnounce { sockaddr_in6 addr; Digest digest; };
 struct NetworkProtocol::NewConnection { Connection conn; };
 struct NetworkProtocol::ConnectionReadReady { Connection::Id id; };
 
@@ -114,6 +130,9 @@ struct NetworkProtocol::Header
 {
 	struct Acknowledged { Digest value; };
 	struct Version { string value; };
+	struct Initiation { Digest value; };
+	struct CookieSet { Cookie value; };
+	struct CookieEcho { Cookie value; };
 	struct DataRequest { Digest value; };
 	struct DataResponse { Digest value; };
 	struct AnnounceSelf { Digest value; };
@@ -126,6 +145,9 @@ struct NetworkProtocol::Header
 	using Item = variant<
 		Acknowledged,
 		Version,
+		Initiation,
+		CookieSet,
+		CookieEcho,
 		DataRequest,
 		DataResponse,
 		AnnounceSelf,
@@ -140,13 +162,27 @@ struct NetworkProtocol::Header
 	static optional<Header> load(const PartialObject &);
 	PartialObject toObject(const PartialStorage &) const;
 
-	const vector<Item> items;
+	template<class T> const T * lookupFirst() const;
+
+	vector<Item> items;
 };
+
+template<class T>
+const T * NetworkProtocol::Header::lookupFirst() const
+{
+	for (const auto & h : items)
+		if (auto ptr = std::get_if<T>(&h))
+			return ptr;
+	return nullptr;
+}
 
 bool operator==(const NetworkProtocol::Header::Item &, const NetworkProtocol::Header::Item &);
 inline bool operator!=(const NetworkProtocol::Header::Item & left,
 		const NetworkProtocol::Header::Item & right)
 { return not (left == right); }
+
+inline bool operator==(const NetworkProtocol::Cookie & left, const NetworkProtocol::Cookie & right)
+{ return left.value == right.value; }
 
 class ReplyBuilder
 {
