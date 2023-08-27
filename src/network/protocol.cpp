@@ -13,6 +13,7 @@ using std::get_if;
 using std::holds_alternative;
 using std::move;
 using std::nullopt;
+using std::runtime_error;
 using std::scoped_lock;
 using std::visit;
 
@@ -21,6 +22,9 @@ namespace erebos {
 struct NetworkProtocol::ConnectionPriv
 {
 	Connection::Id id() const;
+
+	bool send(const PartialStorage &, const Header &,
+			const vector<Object> &, bool secure);
 
 	NetworkProtocol * protocol;
 	const sockaddr_in6 peerAddress;
@@ -37,12 +41,14 @@ NetworkProtocol::NetworkProtocol():
 	sock(-1)
 {}
 
-NetworkProtocol::NetworkProtocol(int s):
-	sock(s)
+NetworkProtocol::NetworkProtocol(int s, Identity id):
+	sock(s),
+	self(move(id))
 {}
 
 NetworkProtocol::NetworkProtocol(NetworkProtocol && other):
-	sock(other.sock)
+	sock(other.sock),
+	self(move(other.self))
 {
 	other.sock = -1;
 }
@@ -51,6 +57,7 @@ NetworkProtocol & NetworkProtocol::operator=(NetworkProtocol && other)
 {
 	sock = other.sock;
 	other.sock = -1;
+	self = move(other.self);
 	return *this;
 }
 
@@ -94,8 +101,57 @@ NetworkProtocol::Connection NetworkProtocol::connect(sockaddr_in6 addr)
 		.protocol = this,
 		.peerAddress = addr,
 	});
-	connections.push_back(conn.get());
+
+	{
+		scoped_lock lock(protocolMutex);
+		connections.push_back(conn.get());
+
+		vector<Header::Item> header {
+			Header::AnnounceSelf { self->ref()->digest() },
+		};
+		conn->send(self->ref()->storage(), header, {}, false);
+	}
+
 	return Connection(move(conn));
+}
+
+void NetworkProtocol::updateIdentity(Identity id)
+{
+	scoped_lock lock(protocolMutex);
+	self = move(id);
+
+	vector<Header::Item> hitems;
+	for (const auto & r : self->refs())
+		hitems.push_back(Header::AnnounceUpdate { r.digest() });
+	for (const auto & r : self->updates())
+		hitems.push_back(Header::AnnounceUpdate { r.digest() });
+
+	Header header(hitems);
+
+	for (const auto & conn : connections)
+		conn->send(self->ref()->storage(), header, { **self->ref() }, false);
+}
+
+void NetworkProtocol::announceTo(variant<sockaddr_in, sockaddr_in6> addr)
+{
+	vector<uint8_t> bytes;
+	{
+		scoped_lock lock(protocolMutex);
+
+		if (!self)
+			throw runtime_error("NetworkProtocol::announceTo without self identity");
+
+		bytes = Header({
+			Header::AnnounceSelf { self->ref()->digest() },
+		}).toObject(self->ref()->storage()).encode();
+	}
+
+	sendto(bytes, addr);
+}
+
+void NetworkProtocol::shutdown()
+{
+	::shutdown(sock, SHUT_RDWR);
 }
 
 bool NetworkProtocol::recvfrom(vector<uint8_t> & buffer, sockaddr_in6 & addr)
@@ -113,23 +169,13 @@ bool NetworkProtocol::recvfrom(vector<uint8_t> & buffer, sockaddr_in6 & addr)
 	return true;
 }
 
-void NetworkProtocol::sendto(const vector<uint8_t> & buffer, sockaddr_in addr)
+void NetworkProtocol::sendto(const vector<uint8_t> & buffer, variant<sockaddr_in, sockaddr_in6> vaddr)
 {
-	::sendto(sock, buffer.data(), buffer.size(), 0,
-			(sockaddr *) &addr, sizeof(addr));
+	visit([&](auto && addr) {
+		::sendto(sock, buffer.data(), buffer.size(), 0,
+				(sockaddr *) &addr, sizeof(addr));
+	}, vaddr);
 }
-
-void NetworkProtocol::sendto(const vector<uint8_t> & buffer, sockaddr_in6 addr)
-{
-	::sendto(sock, buffer.data(), buffer.size(), 0,
-			(sockaddr *) &addr, sizeof(addr));
-}
-
-void NetworkProtocol::shutdown()
-{
-	::shutdown(sock, SHUT_RDWR);
-}
-
 
 /******************************************************************************/
 /* Connection                                                                 */
@@ -242,14 +288,21 @@ bool NetworkProtocol::Connection::send(const PartialStorage & partStorage,
 		const Header & header,
 		const vector<Object> & objs, bool secure)
 {
+	return p->send(partStorage, header, objs, secure);
+}
+
+bool NetworkProtocol::ConnectionPriv::send(const PartialStorage & partStorage,
+		const Header & header,
+		const vector<Object> & objs, bool secure)
+{
 	vector<uint8_t> data, part, out;
 
 	{
-		scoped_lock clock(p->cmutex);
+		scoped_lock clock(cmutex);
 
 		Channel * channel = nullptr;
-		if (holds_alternative<unique_ptr<Channel>>(p->channel))
-			channel = std::get<unique_ptr<Channel>>(p->channel).get();
+		if (auto uptr = get_if<unique_ptr<Channel>>(&this->channel))
+			channel = uptr->get();
 
 		if (channel || secure)
 			data.push_back(0x00);
@@ -265,14 +318,14 @@ bool NetworkProtocol::Connection::send(const PartialStorage & partStorage,
 			out.push_back(0x80);
 			channel->encrypt(data.begin(), data.end(), out, 1);
 		} else if (secure) {
-			p->secureOutQueue.emplace_back(move(data));
+			secureOutQueue.emplace_back(move(data));
 		} else {
 			out = std::move(data);
 		}
 	}
 
 	if (not out.empty())
-		p->protocol->sendto(out, p->peerAddress);
+		protocol->sendto(out, peerAddress);
 
 	return true;
 }

@@ -25,7 +25,7 @@ class NetworkProtocol
 {
 public:
 	NetworkProtocol();
-	explicit NetworkProtocol(int sock);
+	explicit NetworkProtocol(int sock, Identity self);
 	NetworkProtocol(const NetworkProtocol &) = delete;
 	NetworkProtocol(NetworkProtocol &&);
 	NetworkProtocol & operator=(const NetworkProtocol &) = delete;
@@ -55,17 +55,21 @@ public:
 
 	Connection connect(sockaddr_in6 addr);
 
-	bool recvfrom(vector<uint8_t> & buffer, sockaddr_in6 & addr);
-	void sendto(const vector<uint8_t> & buffer, sockaddr_in addr);
-	void sendto(const vector<uint8_t> & buffer, sockaddr_in6 addr);
+	void updateIdentity(Identity self);
+	void announceTo(variant<sockaddr_in, sockaddr_in6> addr);
 
 	void shutdown();
 
 private:
+	bool recvfrom(vector<uint8_t> & buffer, sockaddr_in6 & addr);
+	void sendto(const vector<uint8_t> & buffer, variant<sockaddr_in, sockaddr_in6> addr);
+
 	int sock;
 
 	mutex protocolMutex;
 	vector<uint8_t> buffer;
+
+	optional<Identity> self;
 
 	struct ConnectionPriv;
 	vector<ConnectionPriv *> connections;

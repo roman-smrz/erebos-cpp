@@ -109,14 +109,7 @@ void Server::addPeer(const string & node, const string & service) const
 
 	for (addrinfo * rp = result.get(); rp != nullptr; rp = rp->ai_next) {
 		if (rp->ai_family == AF_INET6) {
-			Peer & peer = p->getPeer(*(sockaddr_in6 *)rp->ai_addr);
-
-			vector<NetworkProtocol::Header::Item> header;
-			{
-				shared_lock lock(p->selfMutex);
-				header.push_back(NetworkProtocol::Header::AnnounceSelf { p->self.ref()->digest() });
-			}
-			peer.connection.send(peer.partStorage, header, {}, false);
+			p->getPeer(*(sockaddr_in6 *)rp->ai_addr);
 			return;
 		}
 	}
@@ -310,7 +303,7 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self):
 	if (sock < 0)
 		throw std::system_error(errno, std::generic_category());
 
-	protocol = NetworkProtocol(sock);
+	protocol = NetworkProtocol(sock, self);
 
 	int disable = 0;
 	// Should be disabled by default, but try to make sure. On platforms
@@ -415,18 +408,13 @@ void Server::Priv::doAnnounce()
 
 		if (lastAnnounce + announceInterval < now) {
 			shared_lock slock(selfMutex);
-			NetworkProtocol::Header header({
-				NetworkProtocol::Header::AnnounceSelf { self.ref()->digest() },
-			});
-
-			vector<uint8_t> bytes = header.toObject(pst).encode();
 
 			for (const auto & in : bcastAddresses) {
 				sockaddr_in sin = {};
 				sin.sin_family = AF_INET;
 				sin.sin_addr = in;
 				sin.sin_port = htons(discoveryPort);
-				protocol.sendto(bytes, sin);
+				protocol.announceTo(sin);
 			}
 
 			lastAnnounce += announceInterval * ((now - lastAnnounce) / announceInterval);
@@ -659,17 +647,7 @@ void Server::Priv::handleLocalHeadChange(const Head<LocalState> & head)
 	if (auto id = head->identity()) {
 		if (*id != self) {
 			self = *id;
-
-			vector<NetworkProtocol::Header::Item> hitems;
-			for (const auto & r : self.refs())
-				hitems.push_back(NetworkProtocol::Header::AnnounceUpdate { r.digest() });
-			for (const auto & r : self.updates())
-				hitems.push_back(NetworkProtocol::Header::AnnounceUpdate { r.digest() });
-
-			NetworkProtocol::Header header(hitems);
-
-			for (const auto & peer : peers)
-				peer->connection.send(peer->partStorage, header, { **self.ref() }, false);
+			protocol.updateIdentity(*id);
 		}
 	}
 }
