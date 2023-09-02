@@ -537,10 +537,10 @@ optional<NetworkProtocol::Header> NetworkProtocol::Header::load(const PartialObj
 		} else if (item.name == "CAC") {
 			if (auto ref = item.asRef())
 				items.emplace_back(ChannelAccept { ref->digest() });
-		} else if (item.name == "STP") {
+		} else if (item.name == "SVT") {
 			if (auto val = item.asUUID())
 				items.emplace_back(ServiceType { *val });
-		} else if (item.name == "SRF") {
+		} else if (item.name == "SVR") {
 			if (auto ref = item.asRef())
 				items.emplace_back(ServiceRef { ref->digest() });
 		}
@@ -588,10 +588,10 @@ PartialObject NetworkProtocol::Header::toObject(const PartialStorage & st) const
 			ritems.emplace_back("CAC", st.ref(ptr->value));
 
 		else if (const auto * ptr = get_if<ServiceType>(&item))
-			ritems.emplace_back("STP", ptr->value);
+			ritems.emplace_back("SVT", ptr->value);
 
 		else if (const auto * ptr = get_if<ServiceRef>(&item))
-			ritems.emplace_back("SRF", st.ref(ptr->value));
+			ritems.emplace_back("SVR", st.ref(ptr->value));
 	}
 
 	return PartialObject(PartialRecord(std::move(ritems)));
