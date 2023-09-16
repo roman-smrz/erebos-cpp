@@ -54,7 +54,6 @@ public:
 	struct Cookie { vector<uint8_t> value; };
 
 	using ChannelState = variant<monostate,
-		Cookie,
 		Stored<ChannelRequest>,
 		shared_ptr<struct WaitingRef>,
 		Stored<ChannelAccept>,
@@ -115,9 +114,9 @@ public:
 	void trySendOutQueue();
 
 private:
-	static optional<Header> receive(vector<uint8_t> & buf,
-			Channel * channel,
-			const PartialStorage & st);
+	static optional<Header> parsePacket(vector<uint8_t> & buf,
+			Channel * channel, const PartialStorage & st,
+			bool & secure);
 
 	unique_ptr<ConnectionPriv> p;
 };

@@ -698,8 +698,7 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 	if (!holds_alternative<Identity>(identity))
 		return;
 
-	if (holds_alternative<monostate>(connection.channel()) ||
-			holds_alternative<NetworkProtocol::Cookie>(connection.channel())) {
+	if (holds_alternative<monostate>(connection.channel())) {
 		auto req = Channel::generateRequest(tempStorage,
 				server.self, std::get<Identity>(identity));
 		connection.channel().emplace<Stored<ChannelRequest>>(req);
