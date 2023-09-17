@@ -520,7 +520,8 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 
 		else if (const auto * rsp = get_if<NetworkProtocol::Header::DataResponse>(&item)) {
 			const auto & dgst = rsp->value;
-			reply.header({ NetworkProtocol::Header::Acknowledged { dgst } });
+			if (not holds_alternative<unique_ptr<Channel>>(peer.connection.channel()))
+				reply.header({ NetworkProtocol::Header::Acknowledged { dgst } });
 			for (auto & pwref : waiting) {
 				if (auto wref = pwref.lock()) {
 					if (std::find(wref->missing.begin(), wref->missing.end(), dgst) !=
@@ -554,7 +555,6 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 		else if (const auto * anu = get_if<NetworkProtocol::Header::AnnounceUpdate>(&item)) {
 			if (holds_alternative<Identity>(peer.identity)) {
 				const auto & dgst = anu->value;
-				reply.header({ NetworkProtocol::Header::Acknowledged { dgst } });
 
 				shared_ptr<WaitingRef> wref(new WaitingRef {
 					.storage = peer.tempStorage,
@@ -628,8 +628,6 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 			if (serviceType) {
 				const auto & dgst = sref->value;
 				auto pref = peer.partStorage.ref(dgst);
-				if (pref)
-					reply.header({ NetworkProtocol::Header::Acknowledged { dgst } });
 
 				shared_ptr<WaitingRef> wref(new WaitingRef {
 					.storage = peer.tempStorage,

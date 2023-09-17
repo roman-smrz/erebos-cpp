@@ -116,7 +116,7 @@ public:
 private:
 	static optional<Header> parsePacket(vector<uint8_t> & buf,
 			Channel * channel, const PartialStorage & st,
-			bool & secure);
+			optional<uint64_t> & secure);
 
 	unique_ptr<ConnectionPriv> p;
 };
@@ -128,6 +128,7 @@ struct NetworkProtocol::ConnectionReadReady { Connection::Id id; };
 struct NetworkProtocol::Header
 {
 	struct Acknowledged { Digest value; };
+	struct AcknowledgedSingle { uint64_t value; };
 	struct Version { string value; };
 	struct Initiation { Digest value; };
 	struct CookieSet { Cookie value; };
@@ -143,6 +144,7 @@ struct NetworkProtocol::Header
 
 	using Item = variant<
 		Acknowledged,
+		AcknowledgedSingle,
 		Version,
 		Initiation,
 		CookieSet,
@@ -162,6 +164,7 @@ struct NetworkProtocol::Header
 	PartialObject toObject(const PartialStorage &) const;
 
 	template<class T> const T * lookupFirst() const;
+	bool isAcknowledged() const;
 
 	vector<Item> items;
 };
