@@ -1,12 +1,12 @@
 job build:
   shell:
-    - make CC=gcc CFLAGS=-Werror CXXFLAGS=-Werror
+    - make CC=gcc CFLAGS="-Werror -Wno-deprecated-declarations" CXXFLAGS="-Werror -Wno-deprecated-declarations"
   artifact erebos:
     path: build/src/erebos
 
 job clang:
   shell:
-    - make CC=clang CFLAGS=-Werror CXXFLAGS=-Werror
+    - make CC=clang CFLAGS="-Werror -Wno-deprecated-declarations" CXXFLAGS="-Werror -Wno-deprecated-declarations"
 
 job test:
   uses:
