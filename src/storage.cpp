@@ -1032,12 +1032,19 @@ vector<Ref> Ref::previous() const
 		return {};
 
 	if (auto sdata = rec->item("SDATA").asRef()) {
-		if (auto drec = sdata.value()->asRecord())
-			return drec->items("SPREV").asRef();
+		if (auto drec = sdata.value()->asRecord()) {
+			auto res = drec->items("SPREV").asRef();
+			if (auto base = drec->item("SBASE").asRef())
+				res.push_back(*base);
+			return res;
+		}
 		return {};
 	}
 
-	return rec->items("PREV").asRef();
+	auto res = rec->items("PREV").asRef();
+	if (auto base = rec->item("BASE").asRef())
+		res.push_back(*base);
+	return res;
 }
 
 Generation Ref::generation() const
