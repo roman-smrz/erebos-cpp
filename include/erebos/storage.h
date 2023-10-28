@@ -580,17 +580,23 @@ std::vector<Stored<T>> Stored<T>::previous() const
 }
 
 template<typename T>
-bool Stored<T>::precedes(const Stored<T> & other) const
+bool precedes(const T & ancestor, const T & descendant)
 {
-	for (const auto & x : other.previous()) {
-		if (*this == x || precedes(x))
+	for (const auto & x : descendant.previous()) {
+		if (ancestor == x || precedes(ancestor, x))
 			return true;
 	}
 	return false;
 }
 
 template<typename T>
-void filterAncestors(std::vector<Stored<T>> & xs)
+bool Stored<T>::precedes(const Stored<T> & other) const
+{
+	return erebos::precedes(*this, other);
+}
+
+template<typename T>
+void filterAncestors(std::vector<T> & xs)
 {
 	if (xs.size() < 2)
 		return;
@@ -598,19 +604,19 @@ void filterAncestors(std::vector<Stored<T>> & xs)
 	std::sort(xs.begin(), xs.end());
 	xs.erase(std::unique(xs.begin(), xs.end()), xs.end());
 
-	std::vector<Stored<T>> old;
+	std::vector<T> old;
 	old.swap(xs);
 
 	for (auto i = old.begin(); i != old.end(); i++) {
 		bool add = true;
 		for (const auto & x : xs)
-			if (i->precedes(x)) {
+			if (precedes(*i, x)) {
 				add = false;
 				break;
 			}
 		if (add)
 			for (auto j = i + 1; j != old.end(); j++)
-				if (i->precedes(*j)) {
+				if (precedes(*i, *j)) {
 					add = false;
 					break;
 				}
