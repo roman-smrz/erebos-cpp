@@ -10,6 +10,7 @@ using std::vector;
 
 template<class T> class Signed;
 struct IdentityData;
+struct StoredIdentityPart;
 
 class Identity
 {
@@ -22,9 +23,11 @@ public:
 	static std::optional<Identity> load(const Ref &);
 	static std::optional<Identity> load(const std::vector<Ref> &);
 	static std::optional<Identity> load(const std::vector<Stored<Signed<IdentityData>>> &);
+	static std::optional<Identity> load(const std::vector<StoredIdentityPart> &);
 	std::vector<Ref> store() const;
 	std::vector<Ref> store(const Storage & st) const;
-	const vector<Stored<Signed<IdentityData>>> & data() const;
+	vector<Stored<Signed<IdentityData>>> data() const;
+	vector<StoredIdentityPart> extData() const;
 
 	std::optional<std::string> name() const;
 	std::optional<Identity> owner() const;
@@ -59,6 +62,7 @@ public:
 	static Builder create(const Storage &);
 	Builder modify() const;
 	Identity update(const vector<Stored<Signed<IdentityData>>> &) const;
+	Identity update(const vector<StoredIdentityPart> &) const;
 
 private:
 	struct Priv;

@@ -9,9 +9,14 @@
 using namespace erebos;
 
 using std::async;
+using std::get_if;
 using std::nullopt;
 using std::runtime_error;
 using std::set;
+using std::visit;
+
+template<class>
+inline constexpr bool always_false_v = false;
 
 DEFINE_SHARED_TYPE(optional<Identity>,
 		"0c6c1fe0-f2d7-4891-926b-c332449f7871",
@@ -32,16 +37,27 @@ optional<Identity> Identity::load(const Ref & ref)
 
 optional<Identity> Identity::load(const vector<Ref> & refs)
 {
-	vector<Stored<Signed<IdentityData>>> data;
+	vector<StoredIdentityPart> data;
 	data.reserve(refs.size());
 
 	for (const auto & ref : refs)
-		data.push_back(Stored<Signed<IdentityData>>::load(ref));
+		data.push_back(StoredIdentityPart::load(ref));
 
 	return load(data);
 }
 
 optional<Identity> Identity::load(const vector<Stored<Signed<IdentityData>>> & data)
+{
+	vector<StoredIdentityPart> parts;
+	parts.reserve(data.size());
+
+	for (const auto & d : data)
+		parts.emplace_back(d);
+
+	return load(parts);
+}
+
+optional<Identity> Identity::load(const vector<StoredIdentityPart> & data)
 {
 	if (auto ptr = Priv::validate(data))
 		return Identity(ptr);
@@ -66,7 +82,17 @@ vector<Ref> Identity::store(const Storage & st) const
 	return res;
 }
 
-const vector<Stored<Signed<IdentityData>>> & Identity::data() const
+vector<Stored<Signed<IdentityData>>> Identity::data() const
+{
+	vector<Stored<Signed<IdentityData>>> base;
+	base.reserve(p->data.size());
+
+	for (const auto & d : p->data)
+		base.push_back(d.base());
+	return base;
+}
+
+vector<StoredIdentityPart> Identity::extData() const
 {
 	return p->data;
 }
@@ -90,7 +116,7 @@ const Identity & Identity::finalOwner() const
 
 Stored<PublicKey> Identity::keyIdentity() const
 {
-	return p->data[0]->data->keyIdentity;
+	return p->data[0].base()->data->keyIdentity;
 }
 
 Stored<PublicKey> Identity::keyMessage() const
@@ -101,8 +127,8 @@ Stored<PublicKey> Identity::keyMessage() const
 bool Identity::sameAs(const Identity & other) const
 {
 	// TODO: proper identity check
-	return p->data[0]->data->keyIdentity ==
-		other.p->data[0]->data->keyIdentity;
+	return p->data[0].base()->data->keyIdentity ==
+		other.p->data[0].base()->data->keyIdentity;
 }
 
 bool Identity::operator==(const Identity & other) const
@@ -154,28 +180,53 @@ Identity::Builder Identity::modify() const
 {
 	return Builder (new Builder::Priv {
 		.storage = p->data[0].ref().storage(),
-		.prev = p->data,
-		.keyIdentity = p->data[0]->data->keyIdentity,
-		.keyMessage = p->data[0]->data->keyMessage,
+		.prev = data(),
+		.keyIdentity = p->data[0].base()->data->keyIdentity,
+		.keyMessage = p->data[0].base()->data->keyMessage,
 	});
 }
 
 Identity Identity::update(const vector<Stored<Signed<IdentityData>>> & updates) const
 {
-	vector<Stored<Signed<IdentityData>>> ndata = p->data;
-	vector<Stored<Signed<IdentityData>>> ownerUpdates = p->updates;
+	vector<StoredIdentityPart> eupdates;
+	eupdates.reserve(updates.size());
+	for (const auto & u : updates)
+		eupdates.emplace_back(u);
+	return update(eupdates);
+}
+
+static bool intersectsRoots(const vector<Digest> & x, const vector<Digest> & y)
+{
+	for (size_t i = 0, j = 0;
+			i < x.size() && j < y.size(); ) {
+		if (x[i] == y[j])
+			return true;
+		if (x[i] < y[j])
+			i++;
+		else
+			j++;
+	}
+	return false;
+}
+
+Identity Identity::update(const vector<StoredIdentityPart> & updates) const
+{
+	vector<StoredIdentityPart> ndata = p->data;
+	vector<StoredIdentityPart> ownerUpdates = p->updates;
 
 	for (const auto & u : updates) {
-		vector<Stored<Signed<IdentityData>>> tmp = p->data;
-		tmp.push_back(u);
+		bool isOur = false;
+		for (const auto & d : p->data) {
+			if (intersectsRoots(u.roots(), d.roots())) {
+				isOur = true;
+				break;
+			}
+		}
 
-		size_t tmp_size = tmp.size();
-		filterAncestors(tmp);
-
-		if (tmp.size() < tmp_size)
-			ndata.push_back(u);
+		if (isOur)
+			ndata.emplace_back(u);
 		else
-			ownerUpdates.push_back(u);
+			ownerUpdates.emplace_back(u);
 	}
 
 	filterAncestors(ndata);
@@ -200,7 +251,7 @@ Identity Identity::Builder::commit() const
 		.prev = p->prev,
 		.name = p->name,
 		.owner = p->owner && p->owner->p->data.size() == 1 ?
-			optional(p->owner->p->data[0]) : nullopt,
+			optional(p->owner->p->data[0].base()) : nullopt,
 		.keyIdentity = p->keyIdentity,
 		.keyMessage = p->keyMessage,
 	});
@@ -217,7 +268,7 @@ Identity Identity::Builder::commit() const
 			throw runtime_error("failed to load secret key");
 	}
 
-	auto p = Identity::Priv::validate({ sdata });
+	auto p = Identity::Priv::validate({ StoredIdentityPart(sdata) });
 	if (!p)
 		throw runtime_error("failed to validate committed identity");
 
@@ -273,34 +324,158 @@ Ref IdentityData::store(const Storage & st) const
 	return st.storeObject(Record(std::move(items)));
 }
 
-bool Identity::Priv::verifySignatures(const Stored<Signed<IdentityData>> & sdata)
+IdentityExtension IdentityExtension::load(const Ref & ref)
 {
-	if (!sdata->isSignedBy(sdata->data->keyIdentity))
+	if (auto rec = ref->asRecord()) {
+		if (auto base = rec->item("SBASE").as<Signed<IdentityData>>()) {
+			vector<StoredIdentityPart> prev;
+			for (const auto & r : rec->items("SPREV").asRef())
+				prev.push_back(StoredIdentityPart::load(r));
+
+			auto ownerRef = rec->item("owner").asRef();
+			return IdentityExtension {
+				.base = *base,
+				.prev = move(prev),
+				.name = rec->item("name").asText(),
+				.owner = ownerRef ? optional(StoredIdentityPart::load(*ownerRef)) : nullopt,
+			};
+		}
+	}
+
+	return IdentityExtension {
+		.base = Stored<Signed<IdentityData>>::load(ref.storage().zref()),
+		.prev = {},
+		.name = nullopt,
+		.owner = nullopt,
+	};
+}
+
+StoredIdentityPart StoredIdentityPart::load(const Ref & ref)
+{
+	if (auto srec = ref->asRecord()) {
+		if (auto sref = srec->item("SDATA").asRef()) {
+			if (auto rec = (*sref)->asRecord()) {
+				if (rec->item("SBASE")) {
+					return StoredIdentityPart(Stored<Signed<IdentityExtension>>::load(ref));
+				}
+			}
+		}
+	}
+
+	return StoredIdentityPart(Stored<Signed<IdentityData>>::load(ref));
+}
+
+Ref StoredIdentityPart::store(const Storage & st) const
+{
+	return visit([&](auto && p) {
+		return p.store(st);
+	}, part);
+}
+
+const Ref & StoredIdentityPart::ref() const
+{
+	return visit([&](auto && p) -> auto const & {
+		return p.ref();
+	}, part);
+}
+
+const Stored<Signed<IdentityData>> & StoredIdentityPart::base() const
+{
+	return visit([&](auto && p) -> auto const & {
+		using T = std::decay_t<decltype(p)>;
+		if constexpr (std::is_same_v<T, Stored<Signed<IdentityData>>>)
+			return p;
+		else if constexpr (std::is_same_v<T, Stored<Signed<IdentityExtension>>>)
+			return p->data->base;
+		else
+			static_assert(always_false_v<T>, "non-exhaustive visitor!");
+	}, part);
+}
+
+vector<StoredIdentityPart> StoredIdentityPart::previous() const
+{
+	return visit([&](auto && p) {
+		using T = std::decay_t<decltype(p)>;
+		if constexpr (std::is_same_v<T, Stored<Signed<IdentityData>>>) {
+			vector<StoredIdentityPart> res;
+			res.reserve(p->data->prev.size());
+			for (const auto & x : p->data->prev)
+				res.emplace_back(x);
+			return res;
+
+		} else if constexpr (std::is_same_v<T, Stored<Signed<IdentityExtension>>>) {
+			vector<StoredIdentityPart> res;
+			res.reserve(1 + p->data->prev.size());
+			res.emplace_back(p->data->base);
+			for (const auto & x : p->data->prev)
+				res.push_back(x);
+			return res;
+
+		} else {
+			static_assert(always_false_v<T>, "non-exhaustive visitor!");
+		}
+	}, part);
+}
+
+vector<Digest> StoredIdentityPart::roots() const
+{
+	return visit([&](auto && p) {
+		return p.roots();
+	}, part);
+}
+
+optional<string> StoredIdentityPart::name() const
+{
+	return visit([&](auto && p) {
+		return p->data->name;
+	}, part);
+}
+
+optional<StoredIdentityPart> StoredIdentityPart::owner() const
+{
+	return visit([&](auto && p) -> optional<StoredIdentityPart> {
+		if (p->data->owner)
+			return StoredIdentityPart(p->data->owner.value());
+		return nullopt;
+	}, part);
+}
+
+bool StoredIdentityPart::isSignedBy(const Stored<PublicKey> & key) const
+{
+	return visit([&](auto && p) {
+		return p->isSignedBy(key);
+	}, part);
+}
+
+
+bool Identity::Priv::verifySignatures(const StoredIdentityPart & sdata)
+{
+	if (!sdata.isSignedBy(sdata.base()->data->keyIdentity))
 		return false;
 
-	for (const auto & p : sdata->data->prev)
-		if (!sdata->isSignedBy(p->data->keyIdentity))
+	for (const auto & p : sdata.previous())
+		if (!sdata.isSignedBy(p.base()->data->keyIdentity))
 			return false;
 
-	if (sdata->data->owner &&
-			!sdata->isSignedBy(sdata->data->owner.value()->data->keyIdentity))
-		return false;
+	if (auto owner = sdata.owner())
+		if (!sdata.isSignedBy(owner->base()->data->keyIdentity))
+			return false;
 
-	for (const auto & p : sdata->data->prev)
+	for (const auto & p : sdata.previous())
 		if (!verifySignatures(p))
 			return false;
 
 	return true;
 }
 
-shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<Stored<Signed<IdentityData>>> & sdata)
+shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<StoredIdentityPart> & sdata)
 {
 	for (const auto & d : sdata)
 		if (!verifySignatures(d))
 			return nullptr;
 
 	auto keyMessageItem = lookupProperty(sdata, []
-			(const IdentityData & d) { return d.keyMessage.has_value(); });
+			(const StoredIdentityPart & d) { return d.base()->data->keyMessage.has_value(); });
 	if (!keyMessageItem)
 		return nullptr;
 
@@ -309,56 +484,56 @@ shared_ptr<Identity::Priv> Identity::Priv::validate(const vector<Stored<Signed<I
 		.updates = {},
 		.name = {},
 		.owner = nullopt,
-		.keyMessage = keyMessageItem.value()->keyMessage.value(),
+		.keyMessage = keyMessageItem->base()->data->keyMessage.value(),
 	};
 	shared_ptr<Priv> ret(p);
 
 	auto ownerProp = lookupProperty(sdata, []
-			(const IdentityData & d) { return d.owner.has_value(); });
+			(const StoredIdentityPart & d) { return d.owner().has_value(); });
 	if (ownerProp) {
-		auto owner = validate({ *ownerProp.value()->owner });
+		auto owner = validate({ ownerProp->owner().value() });
 		if (!owner)
 			return nullptr;
 		p->owner.emplace(Identity(owner));
 	}
 
 	p->name = async(std::launch::deferred, [p] () -> optional<string> {
-		if (auto d = lookupProperty(p->data, [] (const IdentityData & d) { return d.name.has_value(); }))
-			return d.value()->name;
+		if (auto d = lookupProperty(p->data, [] (const StoredIdentityPart & d) { return d.name().has_value(); }))
+			return d->name();
 		return nullopt;
 	});
 
 	return ret;
 }
 
-optional<Stored<IdentityData>> Identity::Priv::lookupProperty(
-			const vector<Stored<Signed<IdentityData>>> & data,
-		function<bool(const IdentityData &)> sel)
+optional<StoredIdentityPart> Identity::Priv::lookupProperty(
+			const vector<StoredIdentityPart> & data,
+		function<bool(const StoredIdentityPart &)> sel)
 {
-	set<Stored<Signed<IdentityData>>> current, prop_heads;
+	set<StoredIdentityPart> current, prop_heads;
 
 	for (const auto & d : data)
 		current.insert(d);
 
 	while (!current.empty()) {
-		Stored<Signed<IdentityData>> sdata =
+		StoredIdentityPart sdata =
 			current.extract(current.begin()).value();
 
-		if (sel(*sdata->data))
+		if (sel(sdata))
 			prop_heads.insert(sdata);
 		else
-			for (const auto & p : sdata->data->prev)
+			for (const auto & p : sdata.previous())
 				current.insert(p);
 	}
 
 	for (auto x = prop_heads.begin(); x != prop_heads.end(); x++)
 		for (auto y = prop_heads.begin(); y != prop_heads.end();)
-			if (y != x && y->precedes(*x))
+			if (y != x && precedes(*y, *x))
 				y = prop_heads.erase(y);
 			else
 				y++;
 
 	if (prop_heads.begin() != prop_heads.end())
-		return (*prop_heads.begin())->data;
+		return *prop_heads.begin();
 	return nullopt;
 }
