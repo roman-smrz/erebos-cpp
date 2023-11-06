@@ -668,11 +668,11 @@ void Server::Peer::updateIdentity(ReplyBuilder &)
 	else if (holds_alternative<Identity>(identity)) {
 		if (!identityUpdates.empty()) {
 			decltype(identityUpdates) keep;
-			vector<Stored<Signed<IdentityData>>> updates;
+			vector<StoredIdentityPart> updates;
 
 			for (auto wref : identityUpdates) {
 				if (auto ref = wref->check())
-					updates.push_back(Stored<Signed<IdentityData>>::load(*ref));
+					updates.push_back(StoredIdentityPart::load(*ref));
 				else
 					keep.push_back(move(wref));
 			}
