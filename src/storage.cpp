@@ -746,7 +746,11 @@ optional<PartialObject> PartialStorage::loadObject(const Digest & digest) const
 }
 
 PartialRef PartialStorage::storeObject(const PartialObject & obj) const
-{ return ref(p->storeBytes(obj.encode())); }
+{
+	if (not obj)
+		return PartialRef::zcreate(*this);
+	return ref(p->storeBytes(obj.encode()));
+}
 
 PartialRef PartialStorage::storeObject(const PartialRecord & val) const
 { return storeObject(PartialObject(val)); }
@@ -775,6 +779,8 @@ Ref Storage::storeObject(const Blob & val) const
 template<class S>
 optional<Digest> Storage::Priv::copy(const typename S::Ref & pref, vector<Digest> * missing) const
 {
+	if (pref.digest().isZero())
+		return pref.digest();
 	if (backend->contains(pref.digest()))
 		return pref.digest();
 	if (pref)
@@ -787,6 +793,9 @@ optional<Digest> Storage::Priv::copy(const typename S::Ref & pref, vector<Digest
 template<class S>
 optional<Digest> Storage::Priv::copy(const ObjectT<S> & pobj, vector<Digest> * missing) const
 {
+	if (not pobj)
+		return Digest(array<uint8_t, Digest::size> {});
+
 	bool fail = false;
 	if (auto rec = pobj.asRecord())
 		for (const auto & r : rec->items().asRef())
@@ -946,6 +955,11 @@ PartialRef PartialRef::create(const PartialStorage & st, const Digest & digest)
 	};
 
 	return PartialRef(shared_ptr<Priv>(p));
+}
+
+PartialRef PartialRef::zcreate(const PartialStorage & st)
+{
+	return create(st, Digest(array<uint8_t, Digest::size> {}));
 }
 
 const Digest & PartialRef::digest() const
@@ -1421,9 +1435,6 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 	vector<uint8_t> res;
 	auto inserter = std::back_inserter(res);
 	for (const auto & item : *ptr) {
-		copy(item.name.begin(), item.name.end(), inserter);
-		inserter = ':';
-
 		string type;
 		string value;
 
@@ -1451,6 +1462,8 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 			value = string(*x);
 		} else if (auto x = item.asRef()) {
 			type = "r";
+			if (x->digest().isZero())
+				continue;
 			value = string(x->digest());
 		} else if (auto x = item.asUnknown()) {
 			type = x->type;
@@ -1459,6 +1472,8 @@ vector<uint8_t> RecordT<S>::encodeInner() const
 			throw runtime_error("unhandeled record item type");
 		}
 
+		copy(item.name.begin(), item.name.end(), inserter);
+		inserter = ':';
 		copy(type.begin(), type.end(), inserter);
 		inserter = ' ';
 
@@ -1596,6 +1611,12 @@ template<class S>
 ObjectT<S> ObjectT<S>::load(const typename S::Ref & ref)
 {
 	return *ref;
+}
+
+template<class S>
+ObjectT<S>::operator bool() const
+{
+	return not holds_alternative<monostate>(content);
 }
 
 template<class S>

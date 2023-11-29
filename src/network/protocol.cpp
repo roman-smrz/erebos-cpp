@@ -134,7 +134,7 @@ NetworkProtocol::Connection NetworkProtocol::connect(sockaddr_in6 addr)
 		connections.push_back(conn.get());
 
 		vector<Header::Item> header {
-			Header::Initiation { Digest(array<uint8_t, Digest::size> {}) },
+			Header::Initiation { Digest::of(Object(Record())) },
 			Header::AnnounceSelf { self->ref()->digest() },
 			Header::Version { defaultVersion },
 		};

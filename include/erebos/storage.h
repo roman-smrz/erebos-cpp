@@ -174,6 +174,7 @@ public:
 	PartialRef & operator=(PartialRef &&) = default;
 
 	static PartialRef create(const PartialStorage &, const Digest &);
+	static PartialRef zcreate(const PartialStorage &);
 
 	const Digest & digest() const;
 
@@ -234,6 +235,7 @@ private:
 		ptr(ptr) {}
 
 public:
+	RecordT(): RecordT(std::vector<Item> {}) {}
 	RecordT(const std::vector<Item> &);
 	RecordT(std::vector<Item> &&);
 	std::vector<uint8_t> encode() const;
@@ -419,6 +421,8 @@ public:
 	static std::vector<ObjectT<S>> decodeMany(const S &, const std::vector<uint8_t> &);
 	std::vector<uint8_t> encode() const;
 	static ObjectT<S> load(const typename S::Ref &);
+
+	operator bool() const;
 
 	std::optional<RecordT<S>> asRecord() const;
 	std::optional<Blob> asBlob() const;
