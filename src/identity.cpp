@@ -145,7 +145,7 @@ bool Identity::operator!=(const Identity & other) const
 optional<Ref> Identity::ref() const
 {
 	if (p->data.size() == 1)
-		return p->data[0].ref();
+		return p->data[0].base().ref();
 	return nullopt;
 }
 

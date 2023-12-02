@@ -25,9 +25,9 @@ LocalState::LocalState(const Ref & ref):
 	p->shared.tip = rec->items("shared").as<SharedData>();
 
 	if (p->identity) {
-		vector<Stored<Signed<IdentityData>>> updates;
+		vector<StoredIdentityPart> updates;
 		for (const auto & r : lookupShared(SharedType<optional<Identity>>::id))
-			updates.push_back(Stored<Signed<IdentityData>>::load(r));
+			updates.push_back(StoredIdentityPart::load(r));
 		if (!updates.empty())
 			p->identity = p->identity->update(updates);
 	}

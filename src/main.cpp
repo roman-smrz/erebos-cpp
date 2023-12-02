@@ -417,8 +417,12 @@ void watchLocalIdentity(const vector<string> &)
 		if (idt) {
 			ostringstream ss;
 			ss << "local-identity";
-			for (optional<Identity> i = idt; i; i = i->owner())
-				ss << " " << i->name().value();
+			for (optional<Identity> i = idt; i; i = i->owner()) {
+				if (auto name = i->name())
+					ss << " " << i->name().value();
+				else
+					ss << " <unnamed>";
+			}
 			printLine(ss.str());
 		}
 	});

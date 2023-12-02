@@ -34,14 +34,13 @@ void AttachService::attachTo(const Peer & peer)
 Stored<AttachIdentity> AttachService::handlePairingComplete(const Peer & peer)
 {
 	auto owner = peer.server().identity().finalOwner();
-	auto id = peer.identity()->ref();
-	auto prev = Stored<Signed<IdentityData>>::load(*peer.identity()->ref());
+	auto pid = peer.identity();
 
 	auto idata = peer.tempStorage().store(IdentityData {
-		.prev = { prev },
+		.prev = pid->data(),
 		.name = nullopt,
-		.owner = Stored<Signed<IdentityData>>::load(*owner.ref()),
-		.keyIdentity = prev->data->keyIdentity,
+		.owner = owner.data()[0],
+		.keyIdentity = pid->keyIdentity(),
 		.keyMessage = nullopt,
 	});
 
