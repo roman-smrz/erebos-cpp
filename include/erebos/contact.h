@@ -57,7 +57,7 @@ struct ContactData
 	Ref store(const Storage &) const;
 
 	vector<Stored<ContactData>> prev;
-	vector<Stored<Signed<IdentityData>>> identity;
+	vector<StoredIdentityPart> identity;
 	optional<string> name;
 };
 

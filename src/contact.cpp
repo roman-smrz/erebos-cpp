@@ -91,7 +91,7 @@ Digest Contact::leastRoot() const
 void Contact::Priv::init()
 {
 	std::call_once(initFlag, [this]() {
-		vector<Stored<Signed<IdentityData>>> idata;
+		vector<StoredIdentityPart> idata;
 		for (const auto & c : findPropertyComponents<Contact>(data, "identity"))
 			for (const auto & i : c->identity)
 				idata.push_back(i);
@@ -111,9 +111,13 @@ ContactData ContactData::load(const Ref & ref)
 	if (!rec)
 		return ContactData();
 
+	vector<StoredIdentityPart> identity;
+	for (const auto & r : rec->items("identity").asRef())
+		identity.push_back(StoredIdentityPart::load(r));
+
 	return ContactData {
 		.prev = rec->items("PREV").as<ContactData>(),
-		.identity = rec->items("identity").as<Signed<IdentityData>>(),
+		.identity = move(identity),
 		.name = rec->item("name").asText(),
 	};
 }
@@ -125,7 +129,7 @@ Ref ContactData::store(const Storage & st) const
 	for (const auto & prev : prev)
 		items.emplace_back("PREV", prev.ref());
 	for (const auto & idt : identity)
-		items.emplace_back("identity", idt);
+		items.emplace_back("identity", idt.ref());
 	if (name)
 		items.emplace_back("name", *name);
 
@@ -155,7 +159,7 @@ Stored<ContactAccepted> ContactService::handlePairingComplete(const Peer & peer)
 	server.localHead().update([&] (const Stored<LocalState> & local) {
 		auto cdata = local.ref().storage().store(ContactData {
 			.prev = {},
-			.identity = peer.identity()->finalOwner().data(),
+			.identity = peer.identity()->finalOwner().extData(),
 			.name = std::nullopt,
 		});
 
@@ -176,7 +180,7 @@ void ContactService::handlePairingResult(Context & ctx, Stored<ContactAccepted>)
 {
 	auto cdata = ctx.local().ref().storage().store(ContactData {
 		.prev = {},
-		.identity = ctx.peer().identity()->finalOwner().data(),
+		.identity = ctx.peer().identity()->finalOwner().extData(),
 		.name = std::nullopt,
 	});
 

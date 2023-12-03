@@ -71,6 +71,37 @@ private:
 	Identity(std::shared_ptr<const Priv> && p);
 };
 
+struct IdentityData;
+struct IdentityExtension;
+
+struct StoredIdentityPart
+{
+	using Part = variant<
+		Stored<Signed<IdentityData>>,
+		Stored<Signed<IdentityExtension>>>;
+
+	StoredIdentityPart(Part p): part(move(p)) {}
+
+	static StoredIdentityPart load(const Ref &);
+	Ref store(const Storage & st) const;
+
+	bool operator==(const StoredIdentityPart & other) const
+	{ return part == other.part; }
+	bool operator<(const StoredIdentityPart & other) const
+	{ return part < other.part; }
+
+	const Ref & ref() const;
+	const Stored<Signed<IdentityData>> & base() const;
+
+	vector<StoredIdentityPart> previous() const;
+	vector<Digest> roots() const;
+	optional<string> name() const;
+	optional<StoredIdentityPart> owner() const;
+	bool isSignedBy(const Stored<PublicKey> &) const;
+
+	Part part;
+};
+
 DECLARE_SHARED_TYPE(optional<Identity>)
 
 }
