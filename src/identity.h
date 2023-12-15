@@ -20,9 +20,9 @@ struct IdentityData
 	static IdentityData load(const Ref &);
 	Ref store(const Storage & st) const;
 
-	const vector<Stored<Signed<IdentityData>>> prev;
-	const optional<string> name;
-	const optional<Stored<Signed<IdentityData>>> owner;
+	const vector<Stored<Signed<IdentityData>>> prev {};
+	const optional<string> name {};
+	const optional<Stored<Signed<IdentityData>>> owner {};
 	const Stored<PublicKey> keyIdentity;
 	const optional<Stored<PublicKey>> keyMessage;
 };
@@ -33,9 +33,9 @@ struct IdentityExtension
 	Ref store(const Storage & st) const;
 
 	const Stored<Signed<IdentityData>> base;
-	const vector<StoredIdentityPart> prev;
-	const optional<string> name;
-	const optional<StoredIdentityPart> owner;
+	const vector<StoredIdentityPart> prev {};
+	const optional<string> name {};
+	const optional<StoredIdentityPart> owner {};
 };
 
 struct Identity::Priv
@@ -56,7 +56,8 @@ struct Identity::Priv
 struct Identity::Builder::Priv
 {
 	Storage storage;
-	vector<Stored<Signed<IdentityData>>> prev = {};
+	vector<Stored<Signed<IdentityData>>> prevBase = {};
+	vector<StoredIdentityPart> prevExt = {};
 	optional<string> name = nullopt;
 	optional<Identity> owner = nullopt;
 	Stored<PublicKey> keyIdentity;

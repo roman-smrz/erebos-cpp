@@ -150,7 +150,7 @@ void NetworkProtocol::updateIdentity(Identity id)
 	self = move(id);
 
 	vector<Header::Item> hitems;
-	for (const auto & r : self->refs())
+	for (const auto & r : self->extRefs())
 		hitems.push_back(Header::AnnounceUpdate { r.digest() });
 	for (const auto & r : self->updates())
 		hitems.push_back(Header::AnnounceUpdate { r.digest() });

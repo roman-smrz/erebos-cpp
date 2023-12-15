@@ -38,7 +38,7 @@ Ref LocalState::store(const Storage & st) const
 	vector<Record::Item> items;
 
 	if (p->identity)
-		items.emplace_back("id", *p->identity->ref());
+		items.emplace_back("id", *p->identity->extRef());
 	for (const auto & x : p->shared.tip)
 		items.emplace_back("shared", x);
 

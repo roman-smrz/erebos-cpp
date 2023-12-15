@@ -75,11 +75,19 @@ void AttachService::handlePairingResult(Context & ctx, Stored<AttachIdentity> at
 	if (!key)
 		throw runtime_error("failed to load secret key");
 
-	auto id = Identity::load(key->signAdd(att->identity).ref());
+	vector<StoredIdentityPart> parts = ctx.local()->identity()->extData();
+	parts.emplace_back(key->signAdd(att->identity));
+	filterAncestors(parts);
+
+	auto id = Identity::load(parts);
 	if (!id)
 		printf("New identity validation failed\n");
 
-	auto rid = ctx.local().ref().storage().copy(*id->ref());
+	optional<Ref> tmpref = id->extRef();
+	if (not tmpref)
+		tmpref = id->modify().commit().extRef();
+
+	auto rid = ctx.local().ref().storage().copy(*tmpref);
 	id = Identity::load(rid);
 
 	auto owner = id->owner();

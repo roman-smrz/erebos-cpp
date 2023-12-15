@@ -41,7 +41,9 @@ public:
 	bool operator!=(const Identity & other) const;
 
 	std::optional<Ref> ref() const;
+	std::optional<Ref> extRef() const;
 	std::vector<Ref> refs() const;
+	std::vector<Ref> extRefs() const;
 	std::vector<Ref> updates() const;
 
 	class Builder

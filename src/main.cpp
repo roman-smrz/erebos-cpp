@@ -289,14 +289,15 @@ void startServer(const vector<string> &)
 
 	config.service<DirectMessageService>()
 		.onUpdate([](const DirectMessageThread & thread, ssize_t, ssize_t) {
-			if (thread.at(0).from()->sameAs(server->identity()))
+			if (thread.at(0).from()->sameAs(server->identity().finalOwner()))
 				return;
 
 			ostringstream ss;
 
 			string name = "<unnamed>";
-			if (auto opt = thread.peer().name())
-				name = *opt;
+			if (auto from = thread.at(0).from())
+				if (auto fname = from->name())
+					name = *fname;
 
 			ss << "dm-received"
 				<< " from " << name

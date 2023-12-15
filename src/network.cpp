@@ -736,7 +736,7 @@ void Server::Peer::finalizeChannel(ReplyBuilder & reply, unique_ptr<Channel> ch)
 	connection.channel().emplace<unique_ptr<Channel>>(move(ch));
 
 	vector<NetworkProtocol::Header::Item> hitems;
-	for (const auto & r : server.self.refs())
+	for (const auto & r : server.self.extRefs())
 		reply.header(NetworkProtocol::Header::AnnounceUpdate { r.digest() });
 	for (const auto & r : server.self.updates())
 		reply.header(NetworkProtocol::Header::AnnounceUpdate { r.digest() });

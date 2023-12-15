@@ -9,7 +9,7 @@
 using namespace erebos;
 
 using std::async;
-using std::get_if;
+using std::holds_alternative;
 using std::nullopt;
 using std::runtime_error;
 using std::set;
@@ -89,6 +89,7 @@ vector<Stored<Signed<IdentityData>>> Identity::data() const
 
 	for (const auto & d : p->data)
 		base.push_back(d.base());
+	filterAncestors(base);
 	return base;
 }
 
@@ -149,7 +150,25 @@ optional<Ref> Identity::ref() const
 	return nullopt;
 }
 
+optional<Ref> Identity::extRef() const
+{
+	if (p->data.size() == 1)
+		return p->data[0].ref();
+	return nullopt;
+}
+
 vector<Ref> Identity::refs() const
+{
+	auto base = data();
+	vector<Ref> res;
+	res.reserve(base.size());
+
+	for (const auto & d : base)
+		res.push_back(d.ref());
+	return res;
+}
+
+vector<Ref> Identity::extRefs() const
 {
 	vector<Ref> res;
 	res.reserve(p->data.size());
@@ -178,9 +197,22 @@ Identity::Builder Identity::create(const Storage & st)
 
 Identity::Builder Identity::modify() const
 {
+	vector<Stored<Signed<IdentityData>>> prevBase;
+	vector<StoredIdentityPart> prevExt;
+
+	prevBase.reserve(p->data.size());
+	for (const auto & d : p->data) {
+		prevBase.push_back(d.base());
+		if (holds_alternative<Stored<Signed<IdentityExtension>>>(d.part))
+			prevExt.push_back(d);
+	}
+
+	filterAncestors(prevBase);
+
 	return Builder (new Builder::Priv {
 		.storage = p->data[0].ref().storage(),
-		.prev = data(),
+		.prevBase = move(prevBase),
+		.prevExt = move(prevExt),
 		.keyIdentity = p->data[0].base()->data->keyIdentity,
 		.keyMessage = p->data[0].base()->data->keyMessage,
 	});
@@ -247,11 +279,18 @@ Identity::Builder::Builder(Priv * p): p(p) {}
 
 Identity Identity::Builder::commit() const
 {
-	auto idata = p->storage.store(IdentityData {
-		.prev = p->prev,
-		.name = p->name,
-		.owner = p->owner && p->owner->p->data.size() == 1 ?
-			optional(p->owner->p->data[0].base()) : nullopt,
+	optional<Stored<Signed<IdentityData>>> ownerBaseData;
+	optional<StoredIdentityPart> ownerExtData;
+	if (p->owner && p->owner->p->data.size() == 1) {
+		ownerExtData = p->owner->p->data[0];
+		ownerBaseData = ownerExtData->base();
+		if (holds_alternative<Stored<Signed<IdentityData>>>(ownerExtData->part))
+			ownerExtData.reset();
+	}
+
+	auto base = p->storage.store(IdentityData {
+		.prev = p->prevBase,
+		.owner = ownerBaseData,
 		.keyIdentity = p->keyIdentity,
 		.keyMessage = p->keyMessage,
 	});
@@ -260,15 +299,38 @@ Identity Identity::Builder::commit() const
 	if (!key)
 		throw runtime_error("failed to load secret key");
 
-	auto sdata = key->sign(idata);
-	if (idata->owner) {
-		if (auto okey = SecretKey::load((*idata->owner)->data->keyIdentity))
-			sdata = okey->signAdd(sdata);
+	auto sbase = key->sign(base);
+	if (base->owner) {
+		if (auto okey = SecretKey::load((*base->owner)->data->keyIdentity))
+			sbase = okey->signAdd(sbase);
 		else
 			throw runtime_error("failed to load secret key");
 	}
 
-	auto p = Identity::Priv::validate({ StoredIdentityPart(sdata) });
+	optional<StoredIdentityPart> spart;
+
+	if (not p->prevExt.empty() || p->name || ownerExtData) {
+		auto ext = p->storage.store(IdentityExtension {
+			.base = sbase,
+			.prev = p->prevExt,
+			.name = p->name,
+			.owner = ownerExtData,
+		});
+
+		auto sext = key->sign(ext);
+		if (ext->owner) {
+			if (auto okey = SecretKey::load(p->owner->keyIdentity()))
+				sext = okey->signAdd(sext);
+			else
+				throw runtime_error("failed to load secret key");
+		}
+
+		spart.emplace(sext);
+	} else {
+		spart.emplace(sbase);
+	}
+
+	auto p = Identity::Priv::validate({ *spart });
 	if (!p)
 		throw runtime_error("failed to validate committed identity");
 
@@ -348,6 +410,21 @@ IdentityExtension IdentityExtension::load(const Ref & ref)
 		.name = nullopt,
 		.owner = nullopt,
 	};
+}
+
+Ref IdentityExtension::store(const Storage & st) const
+{
+	vector<Record::Item> items;
+
+	items.emplace_back("SBASE", base);
+	for (const auto & p : prev)
+		items.emplace_back("SPREV", p.ref());
+	if (name)
+		items.emplace_back("name", *name);
+	if (owner)
+		items.emplace_back("owner", owner->ref());
+
+	return st.storeObject(Record(std::move(items)));
 }
 
 StoredIdentityPart StoredIdentityPart::load(const Ref & ref)

@@ -69,7 +69,7 @@ Ref DirectMessageData::store(const Storage & st) const
 	for (const auto & prev : prev)
 		items.emplace_back("PREV", prev.ref());
 	if (from)
-		items.emplace_back("from", from->ref().value());
+		items.emplace_back("from", from->extRef().value());
 	if (time)
 		items.emplace_back("time", *time);
 	if (text)
@@ -373,7 +373,7 @@ DirectMessage DirectMessageService::send(const Identity & to, const string & tex
 		auto threads = loc->shared<DirectMessageThreads>();
 		msg = st.store(DirectMessageData {
 			.prev = threads.thread(to).p->head,
-			.from = server.identity().finalOwner(),
+			.from = loc->identity()->finalOwner(),
 			.time = ZonedTime::now(),
 			.text = text,
 		});
