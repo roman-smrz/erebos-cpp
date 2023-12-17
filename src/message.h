@@ -53,9 +53,10 @@ struct DirectMessageState
 	vector<Stored<DirectMessageState>> prev;
 	optional<Identity> peer;
 
-	vector<Stored<DirectMessageData>> sent;
-	vector<Stored<DirectMessageData>> received;
-	vector<Stored<DirectMessageData>> seen;
+	vector<Stored<DirectMessageData>> ready {};
+	vector<Stored<DirectMessageData>> sent {};
+	vector<Stored<DirectMessageData>> received {};
+	vector<Stored<DirectMessageData>> seen {};
 };
 
 }

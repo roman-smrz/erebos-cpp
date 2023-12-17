@@ -202,6 +202,7 @@ DirectMessageState DirectMessageState::load(const Ref & ref)
 			.prev = rec->items("PREV").as<DirectMessageState>(),
 			.peer = Identity::load(rec->items("peer").asRef()),
 
+			.ready = rec->items("ready").as<DirectMessageData>(),
 			.sent = rec->items("sent").as<DirectMessageData>(),
 			.received = rec->items("received").as<DirectMessageData>(),
 			.seen = rec->items("seen").as<DirectMessageData>(),
@@ -221,6 +222,8 @@ Ref DirectMessageState::store(const Storage & st) const
 		for (const auto & ref : peer->refs())
 			items.emplace_back("peer", ref);
 
+	for (const auto & x : ready)
+		items.emplace_back("ready", x.ref());
 	for (const auto & x : sent)
 		items.emplace_back("sent", x.ref());
 	for (const auto & x : received)
@@ -280,8 +283,8 @@ bool DirectMessageThreads::operator!=(const DirectMessageThreads & other) const
 DirectMessageThread DirectMessageThreads::thread(const Identity & peer) const
 {
 	vector<Stored<DirectMessageData>> head;
-	for (const auto & c : findThreadComponents(state, peer, &DirectMessageState::sent))
-		for (const auto & m : c->sent)
+	for (const auto & c : findThreadComponents(state, peer, &DirectMessageState::ready))
+		for (const auto & m : c->ready)
 			head.push_back(m);
 	for (const auto & c : findThreadComponents(state, peer, &DirectMessageState::received))
 		for (const auto & m : c->received)
@@ -345,9 +348,7 @@ void DirectMessageService::handle(Context & ctx)
 			auto state = st.store(DirectMessageState {
 				.prev = threads.data(),
 				.peer = powner,
-				.sent = {},
 				.received = { msg },
-				.seen = {},
 			});
 
 			auto res = st.store(loc->shared<DirectMessageThreads>(DirectMessageThreads(state)));
@@ -381,9 +382,7 @@ DirectMessage DirectMessageService::send(const Identity & to, const string & tex
 		auto state = st.store(DirectMessageState {
 			.prev = threads.data(),
 			.peer = to,
-			.sent = { msg },
-			.received = {},
-			.seen = {},
+			.ready = { msg },
 		});
 
 		return st.store(loc->shared<DirectMessageThreads>(DirectMessageThreads(state)));
