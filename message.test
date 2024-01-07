@@ -88,11 +88,17 @@ test DirectMessage:
 
 	# Reload message history
 
-	with p1:
-		send "stop-server"
-		expect /stop-server-done/
-		send "start-server"
+	for p in [p1, p2]:
+		with p:
+			send "stop-server"
+	for p in [p1, p2]:
+		with p:
+			expect /stop-server-done/
+	for p in [p1, p2]:
+		with p:
+			send "start-server"
 
+	with p1:
 		send "contact-list"
 		expect:
 			/contact-list-item $c1_2 Owner2 Owner2/
@@ -111,3 +117,18 @@ test DirectMessage:
 				expect /dm-list-item from Owner2 text hi$i/
 			expect /dm-list-(.*)/ capture done
 			guard (done == "done")
+
+	# Send message while offline
+
+	for p in [p1, p2]:
+		with p:
+			send "stop-server"
+	for p in [p1, p2]:
+		with p:
+			expect /stop-server-done/
+	send "start-server" to p2
+
+	send "dm-send-contact $c1_2 while_offline" to p1
+	send "start-server" to p1
+
+	expect /dm-received from Owner1 text while_offline/ from p2
