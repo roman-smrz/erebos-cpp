@@ -131,12 +131,17 @@ public:
 
 	DirectMessageThread thread(const Identity &);
 
+	static DirectMessage send(const Head<LocalState> &, const Identity &, const std::string &);
+	static DirectMessage send(const Head<LocalState> &, const Contact &, const std::string &);
+	static DirectMessage send(const Head<LocalState> &, const Peer &, const std::string &);
+
 	DirectMessage send(const Identity &, const std::string &);
 	DirectMessage send(const Contact &, const std::string &);
 	DirectMessage send(const Peer &, const std::string &);
 
 private:
 	void updateHandler(const DirectMessageThreads &);
+	static void syncWithPeer(const Head<LocalState> &, const DirectMessageThread &, const Peer &);
 
 	const Config config;
 	const Server & server;

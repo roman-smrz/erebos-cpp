@@ -364,11 +364,11 @@ DirectMessageThread DirectMessageService::thread(const Identity & peer)
 	return server.localState().get().shared<DirectMessageThreads>().thread(peer);
 }
 
-DirectMessage DirectMessageService::send(const Identity & to, const string & text)
+DirectMessage DirectMessageService::send(const Head<LocalState> & head, const Identity & to, const string & text)
 {
 	Stored<DirectMessageData> msg;
 
-	server.localHead().update([&](const Stored<LocalState> & loc) {
+	head.update([&](const Stored<LocalState> & loc) {
 		auto st = loc.ref().storage();
 
 		auto threads = loc->shared<DirectMessageThreads>();
@@ -388,12 +388,28 @@ DirectMessage DirectMessageService::send(const Identity & to, const string & tex
 		return st.store(loc->shared<DirectMessageThreads>(DirectMessageThreads(state)));
 	});
 
-	if (auto peer = server.peer(to))
-		peer->send(myUUID, msg.ref());
-
 	return DirectMessage(new DirectMessage::Priv {
 		.data = move(msg),
 	});
+}
+
+DirectMessage DirectMessageService::send(const Head<LocalState> & head, const Contact & to, const string & text)
+{
+	if (auto id = to.identity())
+		return send(head, *id, text);
+	throw std::runtime_error("contact without erebos identity");
+}
+
+DirectMessage DirectMessageService::send(const Head<LocalState> & head, const Peer & to, const string & text)
+{
+	if (auto id = to.identity())
+		return send(head, id->finalOwner(), text);
+	throw std::runtime_error("peer without known identity");
+}
+
+DirectMessage DirectMessageService::send(const Identity & to, const string & text)
+{
+	return send(server.localHead(), to, text);
 }
 
 DirectMessage DirectMessageService::send(const Contact & to, const string & text)
@@ -448,8 +464,46 @@ void DirectMessageService::updateHandler(const DirectMessageThreads & threads)
 			auto dmt = threads.thread(peer);
 			for (const auto & w : config.watchers)
 				w(dmt, -1, -1);
+
+			if (auto netPeer = server.peer(peer))
+				syncWithPeer(server.localHead(), dmt, *netPeer);
 		}
 
 		prevState = move(state);
 	}
+}
+
+void DirectMessageService::syncWithPeer(const Head<LocalState> & head, const DirectMessageThread & thread, const Peer & peer)
+{
+	for (const auto & msg : thread.p->head)
+		peer.send(myUUID, msg.ref());
+
+	head.update([&](const Stored<LocalState> & loc) {
+		auto st = head.storage();
+
+		auto threads = loc->shared<DirectMessageThreads>();
+
+		vector<Stored<DirectMessageData>> oldSent;
+		for (const auto & c : findThreadComponents(threads.data(), thread.peer(), &DirectMessageState::sent))
+			for (const auto & m : c->sent)
+				oldSent.push_back(m);
+		filterAncestors(oldSent);
+
+		auto newSent = oldSent;
+		for (const auto & msg : thread.p->head)
+			newSent.push_back(msg);
+		filterAncestors(newSent);
+
+		if (newSent != oldSent) {
+			auto state = st.store(DirectMessageState {
+				.prev = threads.data(),
+				.peer = thread.peer(),
+				.sent = move(newSent),
+			});
+
+			return st.store(loc->shared<DirectMessageThreads>(DirectMessageThreads(state)));
+		}
+
+		return loc;
+	});
 }

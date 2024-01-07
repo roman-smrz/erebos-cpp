@@ -68,7 +68,7 @@ void printLine(const string & line)
 }
 
 Storage st(getErebosDir());
-optional<Head<LocalState>> h;
+optional<Head<LocalState>> testHead;
 optional<Server> server;
 
 struct TestPeer
@@ -109,7 +109,7 @@ Contact getContact(const string & id)
 	auto cmp = [](const Contact & x, const Contact & y) {
 		return x.data() < y.data();
 	};
-	for (const auto & c : h->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
+	for (const auto & c : testHead->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
 		if (string(c.leastRoot()) == id) {
 			return c;
 		}
@@ -227,14 +227,14 @@ void createIdentity(const vector<string> & args)
 	}
 
 	if (identity) {
-		auto nh = h->update([&identity] (const auto & loc) {
+		auto nh = testHead->update([&identity] (const auto & loc) {
 			auto ret = loc->identity(*identity);
 			if (identity->owner())
 				ret = ret.template shared<optional<Identity>>(identity->finalOwner());
 			return st.store(ret);
 		});
 		if (nh)
-			*h = *nh;
+			*testHead = *nh;
 	}
 }
 
@@ -309,7 +309,7 @@ void startServer(const vector<string> &)
 
 	config.service<SyncService>();
 
-	server.emplace(*h, move(config));
+	server.emplace(*testHead, move(config));
 
 	server->peerList().onUpdate([](size_t idx, const Peer * peer) {
 		size_t i = 0;
@@ -364,7 +364,7 @@ void sharedStateGet(const vector<string> &)
 {
 	ostringstream ss;
 	ss << "shared-state-get";
-	for (const auto & r : h->behavior().lens<vector<Ref>>().get())
+	for (const auto & r : testHead->behavior().lens<vector<Ref>>().get())
 		ss << " " << string(r.digest());
 	printLine(ss.str());
 }
@@ -379,7 +379,7 @@ void sharedStateWait(const vector<string> & args)
 	};
 	auto watchedPtr = make_shared<SharedStateWait>();
 
-	auto watched = h->behavior().lens<vector<Ref>>().watch([args, watchedPtr] (const vector<Ref> & refs) {
+	auto watched = testHead->behavior().lens<vector<Ref>>().watch([args, watchedPtr] (const vector<Ref> & refs) {
 		vector<Stored<Object>> objs;
 		objs.reserve(refs.size());
 		for (const auto & r : refs)
@@ -413,7 +413,7 @@ void sharedStateWait(const vector<string> & args)
 
 void watchLocalIdentity(const vector<string> &)
 {
-	auto bhv = h->behavior().lens<optional<Identity>>();
+	auto bhv = testHead->behavior().lens<optional<Identity>>();
 	static auto watchedLocalIdentity = bhv.watch([] (const optional<Identity> & idt) {
 		if (idt) {
 			ostringstream ss;
@@ -431,7 +431,7 @@ void watchLocalIdentity(const vector<string> &)
 
 void watchSharedIdentity(const vector<string> &)
 {
-	auto bhv = h->behavior().lens<SharedState>().lens<optional<Identity>>();
+	auto bhv = testHead->behavior().lens<SharedState>().lens<optional<Identity>>();
 	static auto watchedSharedIdentity = bhv.watch([] (const optional<Identity> & idt) {
 		if (idt) {
 			ostringstream ss;
@@ -449,7 +449,7 @@ void updateLocalIdentity(const vector<string> & params)
 		throw invalid_argument("usage: update-local-identity <name>");
 	}
 
-	auto nh = h->update([&params] (const Stored<LocalState> & loc) {
+	auto nh = testHead->update([&params] (const Stored<LocalState> & loc) {
 		auto st = loc.ref().storage();
 
 		auto b = loc->identity()->modify();
@@ -457,7 +457,7 @@ void updateLocalIdentity(const vector<string> & params)
 		return st.store(loc->identity(b.commit()));
 	});
 	if (nh)
-		*h = *nh;
+		*testHead = *nh;
 }
 
 void updateSharedIdentity(const vector<string> & params)
@@ -466,7 +466,7 @@ void updateSharedIdentity(const vector<string> & params)
 		throw invalid_argument("usage: update-shared-identity <name>");
 	}
 
-	auto nh = h->update([&params] (const Stored<LocalState> & loc) {
+	auto nh = testHead->update([&params] (const Stored<LocalState> & loc) {
 		auto st = loc.ref().storage();
 		auto mbid = loc->shared<optional<Identity>>();
 		if (!mbid)
@@ -477,7 +477,7 @@ void updateSharedIdentity(const vector<string> & params)
 		return st.store(loc->shared<optional<Identity>>(optional(b.commit())));
 	});
 	if (nh)
-		*h = *nh;
+		*testHead = *nh;
 }
 
 void attachTo(const vector<string> & params)
@@ -515,7 +515,7 @@ void contactList(const vector<string> &)
 	auto cmp = [](const Contact & x, const Contact & y) {
 		return x.data() < y.data();
 	};
-	for (const auto & c : h->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
+	for (const auto & c : testHead->behavior().lens<SharedState>().lens<Set<Contact>>().get().view(cmp)) {
 		ostringstream ss;
 		ss << "contact-list-item " << string(c.leastRoot()) << " " << c.name();
 		if (auto id = c.identity())
@@ -532,28 +532,30 @@ void contactSetName(const vector<string> & args)
 	auto name = args.at(1);
 
 	auto c = getContact(id);
-	auto nh = h->update([&] (const Stored<LocalState> & loc) {
+	auto nh = testHead->update([&] (const Stored<LocalState> & loc) {
 		auto st = loc.ref().storage();
 		auto cc = c.customName(st, name);
 		auto contacts = loc->shared<Set<Contact>>();
 		return st.store(loc->shared<Set<Contact>>(contacts.add(st, cc)));
 	});
 	if (nh)
-		*h = *nh;
+		*testHead = *nh;
 
 	printLine("contact-set-name-done");
 }
 
 void dmSendPeer(const vector<string> & args)
 {
-	server->svc<DirectMessageService>().send(
+	DirectMessageService::send(
+			*testHead,
 			getPeer(args.at(0)).peer,
 			args.at(1));
 }
 
 void dmSendContact(const vector<string> & args)
 {
-	server->svc<DirectMessageService>().send(
+	DirectMessageService::send(
+			*testHead,
 			getContact(args.at(0)),
 			args.at(1));
 }
@@ -562,7 +564,7 @@ template<class T>
 static void dmList(const T & peer)
 {
 	if (auto id = peer.identity())
-		for (const auto & msg : h->behavior().get().shared<DirectMessageThreads>().thread(*id)) {
+		for (const auto & msg : testHead->behavior().get().shared<DirectMessageThreads>().thread(*id)) {
 			string name = "<unnamed>";
 			if (const auto & from = msg.from())
 				if (const auto & opt = from->name())
@@ -622,7 +624,7 @@ vector<Command> commands = {
 
 int main(int argc, char * argv[])
 {
-	h.emplace([] {
+	testHead.emplace([] {
 		auto hs = st.heads<LocalState>();
 		if (!hs.empty())
 			return hs[0];
