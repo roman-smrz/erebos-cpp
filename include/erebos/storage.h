@@ -649,6 +649,7 @@ public:
 	UUID id() const { return mid; }
 	const Stored<T> & stored() const { return mstored; }
 	const Ref & ref() const { return mstored.ref(); }
+	const Storage & storage() const { return mstored.ref().storage(); }
 
 	optional<Head<T>> reload() const;
 	std::optional<Head<T>> update(const std::function<Stored<T>(const Stored<T> &)> &) const;
@@ -769,7 +770,7 @@ Head<T> Storage::storeHead(const Stored<T> & val) const
 template<typename T>
 optional<Head<T>> Head<T>::reload() const
 {
-	return ref().storage().template head<T>(id());
+	return storage().template head<T>(id());
 }
 
 template<typename T>
@@ -789,7 +790,7 @@ std::optional<Head<T>> Head<T>::update(const std::function<Stored<T>(const Store
 template<typename T>
 WatchedHead<T> Head<T>::watch(const std::function<void(const Head<T> &)> & watcher) const
 {
-	int wid = stored().ref().storage().watchHead(T::headTypeId, id(), [id = id(), watcher] (const Ref & ref) {
+	int wid = storage().watchHead(T::headTypeId, id(), [id = id(), watcher] (const Ref & ref) {
 		watcher(Head<T>(id, ref));
 	});
 	return WatchedHead<T>(*this, wid);
@@ -808,7 +809,7 @@ template<class T>
 WatchedHead<T>::~WatchedHead()
 {
 	if (watcherId >= 0)
-		Head<T>::stored().ref().storage().unwatchHead(
+		Head<T>::storage().unwatchHead(
 				T::headTypeId, Head<T>::id(), watcherId);
 }
 
