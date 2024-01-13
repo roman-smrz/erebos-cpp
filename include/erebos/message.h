@@ -141,6 +141,7 @@ public:
 
 private:
 	void updateHandler(const DirectMessageThreads &);
+	void peerWatcher(size_t, const class Peer *);
 	static void syncWithPeer(const Head<LocalState> &, const DirectMessageThread &, const Peer &);
 
 	const Config config;

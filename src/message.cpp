@@ -314,7 +314,10 @@ DirectMessageService::DirectMessageService(Config && c, const Server & s):
 	server(s),
 	watched(server.localState().lens<SharedState>().lens<DirectMessageThreads>().watch(
 				std::bind(&DirectMessageService::updateHandler, this, std::placeholders::_1)))
-{}
+{
+	server.peerList().onUpdate(std::bind(&DirectMessageService::peerWatcher, this,
+				std::placeholders::_1, std::placeholders::_2));
+}
 
 DirectMessageService::~DirectMessageService() = default;
 
@@ -470,6 +473,16 @@ void DirectMessageService::updateHandler(const DirectMessageThreads & threads)
 		}
 
 		prevState = move(state);
+	}
+}
+
+void DirectMessageService::peerWatcher(size_t, const class Peer * peer)
+{
+	if (peer) {
+		if (auto pid = peer->identity()) {
+			syncWithPeer(server.localHead(),
+					thread(pid->finalOwner()), *peer);
+		}
 	}
 }
 

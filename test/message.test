@@ -132,3 +132,18 @@ test DirectMessage:
 	send "start-server" to p1
 
 	expect /dm-received from Owner1 text while_offline/ from p2
+
+	for p in [p1, p2]:
+		with p:
+			send "stop-server"
+	for p in [p1, p2]:
+		with p:
+			expect /stop-server-done/
+	send "start-server" to p1
+
+	send "dm-send-contact $c1_2 while_peer_offline" to p1
+	# TODO: sync from p1 on peer p2 discovery not ensured without addition wait
+	#wait
+	send "start-server" to p2
+
+	expect /dm-received from Owner1 text while_peer_offline/ from p2
