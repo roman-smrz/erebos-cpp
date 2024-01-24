@@ -34,9 +34,11 @@ Server::Server(const Head<LocalState> & head, ServerConfig && config):
 	p->services.reserve(config.services.size());
 	for (const auto & ctor : config.services)
 		p->services.emplace_back(ctor(*this));
+
+	p->startThreads();
 }
 
-Server:: Server(const std::shared_ptr<Priv> & ptr):
+Server::Server(const std::shared_ptr<Priv> & ptr):
 	p(ptr)
 {
 }
@@ -366,9 +368,6 @@ Server::Priv::Priv(const Head<LocalState> & local, const Identity & self):
 	laddr.sin6_port = htons(discoveryPort);
 	if (::bind(sock, (sockaddr *) &laddr, sizeof(laddr)) < 0)
 		throw std::system_error(errno, std::generic_category());
-
-	threadListen = thread([this] { doListen(); });
-	threadAnnounce = thread([this] { doAnnounce(); });
 }
 
 Server::Priv::~Priv()
@@ -389,6 +388,12 @@ shared_ptr<Server::Priv> Server::Priv::getptr()
 {
 	// Creating temporary object, so just use null deleter
 	return shared_ptr<Priv>(this, [](Priv *){});
+}
+
+void Server::Priv::startThreads()
+{
+	threadListen = thread([this] { doListen(); });
+	threadAnnounce = thread([this] { doAnnounce(); });
 }
 
 void Server::Priv::doListen()

@@ -89,6 +89,8 @@ struct Server::Priv
 
 	shared_ptr<Priv> getptr();
 
+	void startThreads();
+
 	void doListen();
 	void doAnnounce();
 
