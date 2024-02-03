@@ -3,16 +3,21 @@
 #include <erebos/merge.h>
 #include <erebos/service.h>
 
-#include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <tuple>
 
 namespace erebos {
 
+using std::condition_variable;
+using std::deque;
 using std::mutex;
+using std::tuple;
 using std::unique_ptr;
 
 class Contact;
@@ -142,13 +147,21 @@ public:
 private:
 	void updateHandler(const DirectMessageThreads &);
 	void peerWatcher(size_t, const class Peer *);
-	static void syncWithPeer(const Head<LocalState> &, const DirectMessageThread &, const Peer &);
+	void syncWithPeer(const DirectMessageThread &, const Peer &);
+	void doSyncWithPeers();
+	void doSyncWithPeer(const DirectMessageThread &, const Peer &);
 
 	const Config config;
 	const Server & server;
 
 	vector<Stored<DirectMessageState>> prevState;
 	mutex stateMutex;
+
+	mutex peerSyncMutex;
+	condition_variable peerSyncCond;
+	bool peerSyncRun;
+	deque<tuple<DirectMessageThread, Peer>> peerSyncQueue;
+	std::thread peerSyncThread;
 
 	Watched<DirectMessageThreads> watched;
 };

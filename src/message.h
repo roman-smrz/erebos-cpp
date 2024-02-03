@@ -5,6 +5,7 @@
 #include <erebos/storage.h>
 #include <erebos/time.h>
 
+#include <chrono>
 #include <mutex>
 #include <vector>
 
