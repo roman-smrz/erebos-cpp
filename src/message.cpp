@@ -520,13 +520,15 @@ void DirectMessageService::doSyncWithPeers()
 			continue;
 		}
 
-		auto & [ thread, peer ] = peerSyncQueue.front();
+		decltype(peerSyncQueue) queue;
+		std::swap(queue, peerSyncQueue);
+
 		lock.unlock();
 
-		doSyncWithPeer(thread, peer);
+		for (auto & [ thread, peer ] : queue)
+			doSyncWithPeer(thread, peer);
 
 		lock.lock();
-		peerSyncQueue.pop_front();
 	}
 }
 

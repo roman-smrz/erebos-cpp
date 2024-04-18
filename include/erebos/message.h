@@ -4,7 +4,6 @@
 #include <erebos/service.h>
 
 #include <condition_variable>
-#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -15,7 +14,6 @@
 namespace erebos {
 
 using std::condition_variable;
-using std::deque;
 using std::mutex;
 using std::tuple;
 using std::unique_ptr;
@@ -160,7 +158,7 @@ private:
 	mutex peerSyncMutex;
 	condition_variable peerSyncCond;
 	bool peerSyncRun;
-	deque<tuple<DirectMessageThread, Peer>> peerSyncQueue;
+	vector<tuple<DirectMessageThread, Peer>> peerSyncQueue;
 	std::thread peerSyncThread;
 
 	Watched<DirectMessageThreads> watched;
