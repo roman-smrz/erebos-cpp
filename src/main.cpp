@@ -69,6 +69,7 @@ void printLine(const string & line)
 
 Storage st(getErebosDir());
 optional<Head<LocalState>> testHead;
+mutex testHeadMutex; // for updates from main and reading from other threads
 optional<Server> server;
 
 struct TestPeer
@@ -233,8 +234,10 @@ void createIdentity(const vector<string> & args)
 				ret = ret.template shared<optional<Identity>>(identity->finalOwner());
 			return st.store(ret);
 		});
-		if (nh)
+		if (nh) {
+			scoped_lock lock(testHeadMutex);
 			*testHead = *nh;
+		}
 	}
 }
 
@@ -289,8 +292,12 @@ void startServer(const vector<string> &)
 
 	config.service<DirectMessageService>()
 		.onUpdate([](const DirectMessageThread & thread, ssize_t, ssize_t) {
-			if (thread.at(0).from()->sameAs(server->identity().finalOwner()))
-				return;
+			{
+				scoped_lock lock(testHeadMutex);
+				if (auto locIdentity = testHead.value()->identity())
+					if (thread.at(0).from()->sameAs(locIdentity->finalOwner()))
+						return;
+			}
 
 			ostringstream ss;
 
@@ -456,8 +463,10 @@ void updateLocalIdentity(const vector<string> & params)
 		b.name(params[0]);
 		return st.store(loc->identity(b.commit()));
 	});
-	if (nh)
+	if (nh) {
+		scoped_lock lock(testHeadMutex);
 		*testHead = *nh;
+	}
 }
 
 void updateSharedIdentity(const vector<string> & params)
@@ -476,8 +485,10 @@ void updateSharedIdentity(const vector<string> & params)
 		b.name(params[0]);
 		return st.store(loc->shared<optional<Identity>>(optional(b.commit())));
 	});
-	if (nh)
+	if (nh) {
+		scoped_lock lock(testHeadMutex);
 		*testHead = *nh;
+	}
 }
 
 void attachTo(const vector<string> & params)
@@ -538,8 +549,10 @@ void contactSetName(const vector<string> & args)
 		auto contacts = loc->shared<Set<Contact>>();
 		return st.store(loc->shared<Set<Contact>>(contacts.add(st, cc)));
 	});
-	if (nh)
+	if (nh) {
+		scoped_lock lock(testHeadMutex);
 		*testHead = *nh;
+	}
 
 	printLine("contact-set-name-done");
 }
