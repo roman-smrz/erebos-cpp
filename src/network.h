@@ -57,10 +57,10 @@ struct Server::Peer
 
 	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
 
-	void updateIdentity(ReplyBuilder &);
+	void updateIdentity(ReplyBuilder &, vector<shared_ptr<erebos::Peer::Priv>> & notifyPeers);
 	void updateChannel(ReplyBuilder &);
 	void finalizeChannel(ReplyBuilder &, unique_ptr<Channel>);
-	void updateService(ReplyBuilder &);
+	void updateService(ReplyBuilder &, vector<tuple<shared_ptr<erebos::Peer::Priv>, Service &, Ref>> & readyServices);
 };
 
 struct Peer::Priv : enable_shared_from_this<Peer::Priv>
@@ -70,6 +70,7 @@ struct Peer::Priv : enable_shared_from_this<Peer::Priv>
 	size_t listIndex;
 
 	void notifyWatchers();
+	void runServicesHandler(Service & service, Ref ref);
 };
 
 struct PeerList::Priv : enable_shared_from_this<PeerList::Priv>
