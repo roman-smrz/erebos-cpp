@@ -26,6 +26,7 @@ add_library(erebos
 if (NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
 	add_executable(erebos-bin
 		main.cpp
+		test/service.cpp
 	)
 
 	set_target_properties(erebos-bin

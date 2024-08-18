@@ -8,6 +8,7 @@
 #include <erebos/sync.h>
 
 #include "storage.h"
+#include "test/service.h"
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -316,6 +317,23 @@ void startServer(const vector<string> &)
 
 	config.service<SyncService>();
 
+	config.service< TestService >()
+		.onMessage([]( const Stored< Object > & msg ) {
+			auto bytes = msg->encode();
+			auto space = std::find( bytes.begin(), bytes.end(), ' ' );
+			auto type = string( bytes.begin(), space );
+			auto size = std::stoi( string( space + 1, std::find( space + 1, bytes.end(), '\n' ) ) );
+
+			ostringstream ss;
+			ss << "test-message-received"
+				<< " " << type
+				<< " " << size
+				<< " " << string( msg.ref().digest() )
+				;
+			printLine(ss.str());
+		})
+		;
+
 	server.emplace(*testHead, move(config));
 
 	server->peerList().onUpdate([](size_t idx, const Peer * peer) {
@@ -365,6 +383,16 @@ void peerAdd(const vector<string> & args)
 		server->addPeer(args.at(0), args.at(1));
 	else
 		throw invalid_argument("usage: peer-add <node> [<port>]");
+}
+
+void testMessageSend( const vector< string > & args)
+{
+	if (auto ref = st.ref(Digest(args.at(1)))) {
+		TestService::send(getPeer( args.at(0) ).peer, *ref );
+		printLine("test-message-send done");
+	} else {
+		printLine("test-message-send fail");
+	}
 }
 
 void sharedStateGet(const vector<string> &)
@@ -613,6 +641,7 @@ vector<Command> commands = {
 	{ "start-server", startServer },
 	{ "stop-server", stopServer },
 	{ "peer-add", peerAdd },
+	{ "test-message-send", testMessageSend },
 	{ "shared-state-get", sharedStateGet },
 	{ "shared-state-wait", sharedStateWait },
 	{ "watch-local-identity", watchLocalIdentity },
