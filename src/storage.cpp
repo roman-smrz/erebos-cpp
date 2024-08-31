@@ -1579,6 +1579,21 @@ optional<ObjectT<S>> ObjectT<S>::decode(const S & st,
 	return nullopt;
 }
 
+template< class S >
+vector< ObjectT< S >> ObjectT< S >::decodeMany( const S & st,
+		const std::vector< uint8_t > & data)
+{
+	vector< ObjectT< S >> objects;
+	auto cur = data.begin();
+
+	while( auto pair = decodePrefix( st, cur, data.end() )) {
+		auto [ obj, next ] = *pair;
+		objects.push_back( move( obj ));
+		cur = next;
+	}
+	return objects;
+}
+
 template<class S>
 vector<uint8_t> ObjectT<S>::encode() const
 {

@@ -54,6 +54,7 @@ struct Server::Peer
 	PartialStorage partStorage;
 
 	vector<tuple<UUID, shared_ptr<WaitingRef>>> serviceQueue {};
+	vector< shared_ptr< NetworkProtocol::InStream >> dataResponseStreams {};
 
 	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
 
@@ -61,6 +62,7 @@ struct Server::Peer
 	void updateChannel(ReplyBuilder &);
 	void finalizeChannel(ReplyBuilder &, unique_ptr<Channel>);
 	void updateService(ReplyBuilder &, vector<tuple<shared_ptr<erebos::Peer::Priv>, Service &, Ref>> & readyServices);
+	void checkDataResponseStreams( ReplyBuilder & );
 };
 
 struct Peer::Priv : enable_shared_from_this<Peer::Priv>

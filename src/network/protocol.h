@@ -35,8 +35,12 @@ public:
 	static constexpr char defaultVersion[] = "0.1";
 
 	class Connection;
+	class Stream;
+	class InStream;
+	class OutStream;
 
 	struct Header;
+	struct StreamData;
 
 	struct ReceivedAnnounce;
 	struct NewConnection;
@@ -106,19 +110,81 @@ public:
 	optional<Header> receive(const PartialStorage &);
 	bool send(const PartialStorage &, NetworkProtocol::Header,
 			const vector<Object> &, bool secure);
+	bool send( const StreamData & chunk );
 
 	void close();
+
+	shared_ptr< InStream > openInStream( uint8_t sid );
+	shared_ptr< OutStream > openOutStream( uint8_t sid );
 
 	// temporary:
 	ChannelState & channel();
 	void trySendOutQueue();
 
 private:
-	static optional<Header> parsePacket(vector<uint8_t> & buf,
-			Channel * channel, const PartialStorage & st,
-			optional<uint64_t> & secure);
+	static variant< monostate, Header, StreamData >
+		parsePacket(vector<uint8_t> & buf,
+				Channel * channel, const PartialStorage & st,
+				optional<uint64_t> & secure);
 
 	unique_ptr<ConnectionPriv> p;
+};
+
+class NetworkProtocol::Stream
+{
+	friend class NetworkProtocol;
+	friend class NetworkProtocol::Connection;
+
+protected:
+	Stream(uint8_t id_): id( id_ ) {}
+
+	bool hasDataLocked() const;
+
+	size_t writeLocked( const uint8_t * buf, size_t size );
+	size_t readLocked( uint8_t * buf, size_t size );
+
+	uint8_t id;
+	bool closed { false };
+	vector< uint8_t > writeBuffer;
+	vector< uint8_t > readBuffer;
+	vector< uint8_t >::const_iterator readPtr;
+	mutable mutex streamMutex;
+};
+
+class NetworkProtocol::InStream : public NetworkProtocol::Stream
+{
+	friend class NetworkProtocol;
+	friend class NetworkProtocol::Connection;
+
+protected:
+	InStream(uint8_t id): Stream( id ) {}
+
+public:
+	bool isComplete() const;
+	vector< uint8_t > readAll();
+	size_t read( uint8_t * buf, size_t size );
+
+protected:
+	void writeChunk( StreamData chunk );
+	bool tryUseChunkLocked( const StreamData & chunk );
+
+private:
+	uint64_t nextSequence { 0 };
+	vector< StreamData > outOfOrderChunks;
+};
+
+class NetworkProtocol::OutStream : public NetworkProtocol::Stream
+{
+	friend class NetworkProtocol;
+	friend class NetworkProtocol::Connection;
+
+protected:
+	OutStream(uint8_t id): Stream( id ) {}
+
+private:
+	StreamData getNextChunkLocked( size_t size );
+
+	uint64_t nextSequence { 0 };
 };
 
 struct NetworkProtocol::ReceivedAnnounce { sockaddr_in6 addr; Digest digest; };
@@ -141,6 +207,7 @@ struct NetworkProtocol::Header
 	struct ChannelAccept { Digest value; };
 	struct ServiceType { UUID value; };
 	struct ServiceRef { Digest value; };
+	struct StreamOpen { uint8_t value; };
 
 	using Item = variant<
 		Acknowledged,
@@ -156,7 +223,8 @@ struct NetworkProtocol::Header
 		ChannelRequest,
 		ChannelAccept,
 		ServiceType,
-		ServiceRef>;
+		ServiceRef,
+		StreamOpen>;
 
 	Header(const vector<Item> & items): items(items) {}
 	static optional<Header> load(const PartialRef &);
@@ -167,6 +235,13 @@ struct NetworkProtocol::Header
 	bool isAcknowledged() const;
 
 	vector<Item> items;
+};
+
+struct NetworkProtocol::StreamData
+{
+	uint8_t id;
+	uint8_t sequence;
+	vector< uint8_t > data;
 };
 
 template<class T>
