@@ -445,9 +445,17 @@ void Server::Priv::doListen()
 			}
 			peer->updateService( reply, readyServices );
 
-			if (!reply.header().empty())
+			if( not reply.header().empty() ) {
+				for( const auto & item : reply.header() ) {
+					if( const auto * req = get_if< NetworkProtocol::Header::DataRequest >( &item )) {
+						const auto & dgst = req->value;
+						peer->requestedData.push_back( dgst );
+					}
+				}
+
 				peer->connection.send(peer->partStorage,
 						NetworkProtocol::Header(reply.header()), reply.body(), false);
+			}
 
 			peer->connection.trySendOutQueue();
 		}
@@ -599,11 +607,14 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				reply.header({ Header::Acknowledged { dgst } });
 
 			if (peer.partStorage.loadObject( dgst )) {
+				peer.requestedData.erase(
+						std::remove( peer.requestedData.begin(), peer.requestedData.end(), dgst ),
+						peer.requestedData.end() );
 				for (auto & pwref : waiting) {
 					if (auto wref = pwref.lock()) {
 						if (std::find(wref->missing.begin(), wref->missing.end(), dgst) !=
 								wref->missing.end()) {
-							if (wref->check(reply))
+							if( wref->check( reply, peer.requestedData ))
 								pwref.reset();
 						}
 					}
@@ -633,7 +644,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				});
 				waiting.push_back(wref);
 				peer.identity = wref;
-				wref->check(reply);
+				wref->check( reply, peer.requestedData );
 			}
 		}
 
@@ -648,7 +659,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				});
 				waiting.push_back(wref);
 				peer.identityUpdates.push_back(wref);
-				wref->check(reply);
+				wref->check( reply, peer.requestedData );
 			}
 		}
 
@@ -673,7 +684,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				});
 				waiting.push_back(wref);
 				peer.connection.channel() = wref;
-				wref->check(reply);
+				wref->check( reply, peer.requestedData );
 			}
 		}
 
@@ -721,7 +732,7 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				});
 				waiting.push_back(wref);
 				peer.serviceQueue.emplace_back(*serviceType, wref);
-				wref->check(reply);
+				wref->check( reply, peer.requestedData );
 			}
 		}
 	}
@@ -797,7 +808,7 @@ void Server::Peer::updateChannel(ReplyBuilder & reply)
 	}
 
 	if (holds_alternative<shared_ptr<WaitingRef>>(connection.channel())) {
-		if (auto ref = std::get<shared_ptr<WaitingRef>>(connection.channel())->check(reply)) {
+		if( auto ref = std::get< shared_ptr< WaitingRef >>( connection.channel())->check( reply, requestedData )) {
 			auto req = Stored<ChannelRequest>::load(*ref);
 			if (holds_alternative<Identity>(identity) &&
 					req->isSignedBy(std::get<Identity>(identity).keyMessage())) {
@@ -834,7 +845,7 @@ void Server::Peer::updateService(ReplyBuilder & reply, vector<tuple<shared_ptr<e
 {
 	decltype(serviceQueue) next;
 	for (auto & x : serviceQueue) {
-		if (auto ref = std::get<1>(x)->check(reply)) {
+		if( auto ref = std::get<1>(x)->check( reply, requestedData )) {
 			if (lpeer) {
 				for (auto & svc : server.services) {
 					if (svc->uuid() == std::get<UUID>(x)) {
@@ -857,15 +868,20 @@ void Server::Peer::checkDataResponseStreams( ReplyBuilder & reply )
 			auto objects = PartialObject::decodeMany( partStorage, s->readAll() );
 			vector< PartialRef > refs;
 			refs.reserve( objects.size() );
-			for( const auto & obj : objects )
-				refs.push_back( partStorage.storeObject( obj ));
+			for( const auto & obj : objects ) {
+				auto ref = partStorage.storeObject( obj );
+				refs.push_back( ref );
+				requestedData.erase(
+						std::remove( requestedData.begin(), requestedData.end(), ref.digest() ),
+						requestedData.end() );
+			}
 
 			for( auto & pwref : server.waiting ) {
 				if (auto wref = pwref.lock()) {
 					for( const auto & ref : refs ) {
 						if( std::find( wref->missing.begin(), wref->missing.end(), ref.digest() ) !=
 								wref->missing.end() ) {
-							if( wref->check( reply ) )
+							if( wref->check( reply, requestedData ) )
 								pwref.reset();
 						}
 					}
@@ -917,13 +933,16 @@ optional<Ref> WaitingRef::check()
 	return nullopt;
 }
 
-optional<Ref> WaitingRef::check(ReplyBuilder & reply)
+optional<Ref> WaitingRef::check( ReplyBuilder & reply, const vector< Digest > & alreadyRequested)
 {
 	if (auto r = check())
 		return r;
 
-	for (const auto & d : missing)
-		reply.header({ NetworkProtocol::Header::DataRequest { d } });
+	for( const auto & d : missing ) {
+		if( std::find( alreadyRequested.begin(), alreadyRequested.end(), d ) ==
+				alreadyRequested.end() )
+			reply.header({ NetworkProtocol::Header::DataRequest { d } });
+	}
 
 	return nullopt;
 }

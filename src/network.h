@@ -55,6 +55,7 @@ struct Server::Peer
 
 	vector<tuple<UUID, shared_ptr<WaitingRef>>> serviceQueue {};
 	vector< shared_ptr< NetworkProtocol::InStream >> dataResponseStreams {};
+	vector< Digest > requestedData {};
 
 	shared_ptr<erebos::Peer::Priv> lpeer = nullptr;
 

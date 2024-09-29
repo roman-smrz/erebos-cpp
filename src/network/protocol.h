@@ -282,7 +282,7 @@ struct WaitingRef
 	vector<Digest> missing;
 
 	optional<Ref> check();
-	optional<Ref> check(ReplyBuilder &);
+	optional<Ref> check( ReplyBuilder &, const vector< Digest > &);
 };
 
 }
