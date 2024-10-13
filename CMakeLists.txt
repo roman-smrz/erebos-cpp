@@ -12,7 +12,7 @@ endif()
 
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
-find_package(OpenSSL REQUIRED)
+find_package(OpenSSL 3.0 REQUIRED)
 find_library(B2_LIBRARY b2 REQUIRED)
 
 add_subdirectory(src)

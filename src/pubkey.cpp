@@ -108,7 +108,7 @@ optional<SecretKey> SecretKey::fromData(const Stored<PublicKey> & pub, const vec
 	keyData.resize(keyLen);
 	EVP_PKEY_get_raw_public_key(pub->key.get(), keyData.data(), &keyLen);
 
-	if (EVP_PKEY_cmp(pkey.get(), pub->key.get()) != 1)
+	if( EVP_PKEY_eq( pkey.get(), pub->key.get() ) != 1 )
 		return nullopt;
 
 	pub.ref().storage().storeKey(pub.ref(), sdata);
