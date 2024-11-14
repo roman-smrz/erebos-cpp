@@ -261,28 +261,4 @@ inline bool operator!=(const NetworkProtocol::Header::Item & left,
 inline bool operator==(const NetworkProtocol::Cookie & left, const NetworkProtocol::Cookie & right)
 { return left.value == right.value; }
 
-class ReplyBuilder
-{
-public:
-	void header(NetworkProtocol::Header::Item &&);
-	void body(const Ref &);
-
-	const vector<NetworkProtocol::Header::Item> & header() const { return mheader; }
-	vector<Object> body() const;
-
-private:
-	vector<NetworkProtocol::Header::Item> mheader;
-	vector<Ref> mbody;
-};
-
-struct WaitingRef
-{
-	const Storage storage;
-	const PartialRef ref;
-	vector<Digest> missing;
-
-	optional<Ref> check();
-	optional<Ref> check( ReplyBuilder &, const vector< Digest > &);
-};
-
 }

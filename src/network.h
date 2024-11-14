@@ -136,4 +136,30 @@ struct Server::Priv
 	vector<unique_ptr<Service>> services;
 };
 
+class ReplyBuilder
+{
+public:
+	using Header = NetworkProtocol::Header;
+
+	void header( Header::Item && );
+	void body( const Ref & );
+
+	const vector< Header::Item > & header() const { return mheader; }
+	vector< Object > body() const;
+
+private:
+	vector< Header::Item > mheader;
+	vector< Ref > mbody;
+};
+
+struct WaitingRef
+{
+	const Storage storage;
+	const PartialRef ref;
+	vector< Digest > missing;
+
+	optional< Ref > check();
+	optional< Ref > check( ReplyBuilder &, const vector< Digest > &);
+};
+
 }
