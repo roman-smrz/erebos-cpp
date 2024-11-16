@@ -106,6 +106,7 @@ public:
 	Id id() const;
 
 	const sockaddr_in6 & peerAddress() const;
+	size_t mtu() const;
 
 	optional<Header> receive(const PartialStorage &);
 	bool send(const PartialStorage &, NetworkProtocol::Header,
@@ -115,7 +116,7 @@ public:
 	void close();
 
 	shared_ptr< InStream > openInStream( uint8_t sid );
-	shared_ptr< OutStream > openOutStream( uint8_t sid );
+	shared_ptr< OutStream > openOutStream();
 
 	// temporary:
 	ChannelState & channel();
@@ -136,14 +137,21 @@ class NetworkProtocol::Stream
 	friend class NetworkProtocol::Connection;
 
 protected:
-	Stream(uint8_t id_): id( id_ ) {}
+	Stream(uint8_t id_);
 
+public:
+	void close();
+
+protected:
 	bool hasDataLocked() const;
 
 	size_t writeLocked( const uint8_t * buf, size_t size );
 	size_t readLocked( uint8_t * buf, size_t size );
 
-	uint8_t id;
+public:
+	const uint8_t id;
+
+protected:
 	bool closed { false };
 	vector< uint8_t > writeBuffer;
 	vector< uint8_t > readBuffer;
@@ -180,6 +188,9 @@ class NetworkProtocol::OutStream : public NetworkProtocol::Stream
 
 protected:
 	OutStream(uint8_t id): Stream( id ) {}
+
+public:
+	size_t write( const uint8_t * buf, size_t size );
 
 private:
 	StreamData getNextChunkLocked( size_t size );
@@ -225,6 +236,8 @@ struct NetworkProtocol::Header
 		ServiceType,
 		ServiceRef,
 		StreamOpen>;
+
+	static constexpr size_t itemSize = 78; /* estimate for size of ref-containing headers */
 
 	Header(const vector<Item> & items): items(items) {}
 	static optional<Header> load(const PartialRef &);

@@ -252,7 +252,13 @@ bool Peer::send(UUID uuid, const Ref & ref, const Object & obj) const
 			NetworkProtocol::Header::ServiceType { uuid },
 			NetworkProtocol::Header::ServiceRef { ref.digest() },
 		});
-		speer->connection.send(speer->partStorage, move(header), { obj }, true);
+
+		vector< Object > body;
+		if( obj.encode().size() + 2 * NetworkProtocol::Header::itemSize
+				<= speer->connection.mtu() )
+			body.push_back( obj );
+
+		speer->connection.send( speer->partStorage, move(header), body, true );
 		return true;
 	}
 
@@ -442,6 +448,7 @@ void Server::Priv::doListen()
 				peer->updateChannel( reply );
 			} else {
 				peer->checkDataResponseStreams( reply );
+				peer->updateIdentity( reply, notifyPeers );
 			}
 			peer->updateService( reply, readyServices );
 
@@ -454,7 +461,15 @@ void Server::Priv::doListen()
 				}
 
 				peer->connection.send(peer->partStorage,
-						NetworkProtocol::Header(reply.header()), reply.body(), false);
+						NetworkProtocol::Header( reply.header() ),
+						reply.stream() ? vector< Object >{} : reply.body(), false );
+				if( reply.stream() ){
+					for( const auto & obj : reply.body() ) {
+						auto part = obj.encode();
+						reply.stream()->write( part.data(), part.size() );
+					}
+					reply.stream()->close();
+				}
 			}
 
 			peer->connection.trySendOutQueue();
@@ -597,6 +612,10 @@ void Server::Priv::handlePacket(Server::Peer & peer, const NetworkProtocol::Head
 				if (auto ref = peer.tempStorage.ref(dgst)) {
 					reply.header({ NetworkProtocol::Header::DataResponse { ref->digest() } });
 					reply.body(*ref);
+
+					if( holds_alternative< unique_ptr< Channel >>( peer.connection.channel() ) and
+							reply.size() > peer.connection.mtu() and not reply.stream() )
+						reply.stream( peer.connection.openOutStream() );
 				}
 			}
 		}
@@ -907,7 +926,15 @@ void ReplyBuilder::body(const Ref & ref)
 	for (const auto & x : mbody)
 		if (x.digest() == ref.digest())
 			return;
+
+	bodySize += ref->encode().size();
 	mbody.push_back(ref);
+}
+
+void ReplyBuilder::stream( shared_ptr< NetworkProtocol::OutStream > s )
+{
+	mheader.emplace_back( Header::StreamOpen{ s->id });
+	mstream = move( s );
 }
 
 vector<Object> ReplyBuilder::body() const
@@ -917,6 +944,11 @@ vector<Object> ReplyBuilder::body() const
 	for (const Ref & ref : mbody)
 		res.push_back(*ref);
 	return res;
+}
+
+size_t ReplyBuilder::size() const
+{
+	return mheader.size() * Header::itemSize + bodySize;
 }
 
 

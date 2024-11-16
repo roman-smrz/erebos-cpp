@@ -143,13 +143,19 @@ public:
 
 	void header( Header::Item && );
 	void body( const Ref & );
+	void stream( shared_ptr< NetworkProtocol::OutStream >);
 
 	const vector< Header::Item > & header() const { return mheader; }
 	vector< Object > body() const;
+	shared_ptr< NetworkProtocol::OutStream > stream() const { return mstream; }
+
+	size_t size() const;
 
 private:
 	vector< Header::Item > mheader;
 	vector< Ref > mbody;
+	size_t bodySize = 0;
+	shared_ptr< NetworkProtocol::OutStream > mstream;
 };
 
 struct WaitingRef
