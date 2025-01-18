@@ -165,7 +165,7 @@ template<typename A>
 using Bhv = BhvFun<monostate, A>;
 
 template<typename A>
-Watched<A> Bhv<A>::watch(function<void(const A &)> f)
+Watched<A> BhvFun<monostate, A>::watch(function<void(const A &)> f)
 {
 	BhvCurTime ctime;
 	auto & impl = BhvFun<monostate, A>::impl;
